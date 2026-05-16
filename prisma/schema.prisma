@@ -1,0 +1,181 @@
+// AdPulse Prisma Schema
+// Database: PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+// ============================================================
+// Auth
+// ============================================================
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String?
+  role      Role     @default(ADMIN)
+  image     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+// ============================================================
+// Clients
+// ============================================================
+
+model Client {
+  id           String     @id @default(cuid())
+  name         String
+  company      String?
+  email        String?
+  phone        String?
+  whatsappPhone String?   // WhatsApp number in E.164 format (e.g. +1234567890)
+  platform     Platform
+  accountId    String     // Google/Meta account ID
+  accessToken  String?    // Encrypted OAuth access token
+  refreshToken String?    // Encrypted OAuth refresh token
+  tokenExpiry  DateTime?
+  isActive     Boolean    @default(true)
+  balance      Float      @default(0)  // Account prepaid balance fetched from platform API
+  notes        String?
+  campaigns    Campaign[]
+  alerts       Alert[]
+  syncLogs     SyncLog[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([platform, accountId])
+  @@map("clients")
+}
+
+// ============================================================
+// Campaigns
+// ============================================================
+
+model Campaign {
+  id          String         @id @default(cuid())
+  clientId    String
+  client      Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  externalId  String         // Platform campaign ID
+  name        String
+  status      CampaignStatus @default(ACTIVE)
+  platform    Platform
+  // Budget fields
+  dailyBudget  Float         @default(0)  // Daily budget in account currency
+  totalBudget  Float         @default(0)  // Lifetime/total budget
+  // Performance metrics (current period)
+  spend        Float         @default(0)
+  clicks       Int           @default(0)
+  impressions  Int           @default(0)
+  conversions  Int           @default(0)
+  ctr          Float         @default(0)  // Click-through rate (%)
+  cpc          Float         @default(0)  // Cost per click
+  cpa          Float         @default(0)  // Cost per acquisition
+  roas         Float         @default(0)  // Return on ad spend
+  // Historical snapshots (JSON array of daily stats)
+  dailyStats   Json?         // [{ date, spend, clicks, impressions, conversions }]
+  // Dates
+  startDate    DateTime?
+  endDate      DateTime?
+  lastSynced   DateTime      @default(now())
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([clientId, externalId])
+  @@index([clientId])
+  @@index([status])
+  @@map("campaigns")
+}
+
+// ============================================================
+// Alerts
+// ============================================================
+
+model Alert {
+  id         String    @id @default(cuid())
+  clientId   String
+  client     Client    @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  campaignId String?   // Optional: linked campaign
+  type       AlertType
+  message    String
+  severity   Severity  @default(WARNING)
+  isRead     Boolean   @default(false)
+  resolvedAt DateTime?
+  metadata   Json?     // Additional context data
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  @@index([clientId])
+  @@index([isRead])
+  @@index([severity])
+  @@map("alerts")
+}
+
+// ============================================================
+// Sync Logs
+// ============================================================
+
+model SyncLog {
+  id         String     @id @default(cuid())
+  clientId   String
+  client     Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  status     SyncStatus @default(PENDING)
+  startedAt  DateTime   @default(now())
+  finishedAt DateTime?
+  error      String?
+  recordsUpdated Int    @default(0)
+
+  @@index([clientId])
+  @@map("sync_logs")
+}
+
+// ============================================================
+// Enums
+// ============================================================
+
+enum Role {
+  ADMIN
+  VIEWER
+}
+
+enum Platform {
+  GOOGLE
+  META
+}
+
+enum CampaignStatus {
+  ACTIVE
+  PAUSED
+  ENDED
+  DELETED
+}
+
+enum AlertType {
+  BUDGET_LOW        // Budget usage > threshold
+  BUDGET_EXCEEDED   // Spend > budget
+  CAMPAIGN_PAUSED   // Campaign unexpectedly paused
+  PERFORMANCE_DROP  // CTR or conversions dropped significantly
+  SYNC_ERROR        // Failed to sync data
+}
+
+enum Severity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum SyncStatus {
+  PENDING
+  RUNNING
+  SUCCESS
+  FAILED
+}
