@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Zap, Lock, Mail, Loader2, Eye, EyeOff } from "lucide-react";
+import { Lock, Mail, Loader2, Eye, EyeOff } from "lucide-react";
+import { Logo } from "@/components/shared/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,11 +58,10 @@ export default function LoginPage() {
       <div className="w-full max-w-md relative">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="flex h-20 w-20 items-center justify-center rounded-2xl bg-primary shadow-lg shadow-primary/25 mb-4">
-            <Zap className="h-10 w-10 text-primary-foreground" />
-          </div>
-          <h1 className="text-3xl font-bold">Grow Medico</h1>
-          <p className="text-base text-muted-foreground mt-1">Ads Intelligence Dashboard</p>
+          <h1>
+            <Logo className="h-20" priority />
+          </h1>
+          <p className="text-base text-muted-foreground mt-3">Ads Intelligence Dashboard</p>
         </div>
 
         <Card className="shadow-xl border-border/50">

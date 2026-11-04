@@ -10,12 +10,12 @@ import {
   Bell,
   BarChart3,
   Inbox,
-  Zap,
   LogOut,
   X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAlerts } from "@/hooks/useAlerts";
+import { Logo } from "@/components/shared/Logo";
 
 const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Overview" },
@@ -42,12 +42,8 @@ function SidebarContent({ onClose }: { onClose?: () => void }) {
     <div className="flex h-full flex-col">
       {/* Logo */}
       <div className="flex h-16 items-center gap-3 px-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-700 shadow-sm">
-          <Zap className="h-5 w-5 text-white" />
-        </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[15px] font-semibold leading-tight">Grow Medico</p>
-          <p className="text-xs text-muted-foreground">Ads Intelligence</p>
+          <Logo className="h-11" priority />
         </div>
         {onClose && (
           <button
