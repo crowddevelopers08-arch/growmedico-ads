@@ -9,6 +9,7 @@ const updateClientSchema = z.object({
   email: z.string().email().optional().or(z.literal("")),
   phone: z.string().max(20).optional(),
   whatsappPhone: z.string().max(20).optional(),
+  metaPageId: z.string().max(50).optional(),
   accountId: z.string().min(1).max(50).optional(),
   accessToken: z.string().optional(),
   refreshToken: z.string().optional(),
@@ -84,6 +85,9 @@ export async function PATCH(
       data: {
         ...validated.data,
         email: validated.data.email || null,
+        ...(validated.data.metaPageId !== undefined && {
+          metaPageId: validated.data.metaPageId || null,
+        }),
         updatedAt: new Date(),
       },
     });
@@ -93,6 +97,12 @@ export async function PATCH(
     const e = error as { code?: string };
     if (e.code === "P2025") {
       return NextResponse.json({ error: "Client not found" }, { status: 404 });
+    }
+    if (e.code === "P2002") {
+      return NextResponse.json(
+        { error: "This Meta Page ID is already linked to another client." },
+        { status: 409 }
+      );
     }
     console.error(`[PATCH /api/clients/${id}]`, error);
     return NextResponse.json({ error: "Failed to update client" }, { status: 500 });

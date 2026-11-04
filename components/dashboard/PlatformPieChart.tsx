@@ -1,28 +1,15 @@
 "use client";
 
-import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from "recharts";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
+import { PieChart as PieChartIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { formatCurrency, getPlatformLabel } from "@/lib/utils";
+import { formatCurrency, getPlatformColor, getPlatformLabel } from "@/lib/utils";
 
 interface PlatformPieChartProps {
   data: { platform: string; spend: number }[];
   title?: string;
   description?: string;
 }
-
-const PLATFORM_COLORS: Record<string, string> = {
-  GOOGLE: "#4285F4",
-  META: "#1877F2",
-};
-
-const DEFAULT_COLORS = ["#6366f1", "#8b5cf6", "#a78bfa"];
 
 interface TooltipPayload {
   name: string;
@@ -39,9 +26,9 @@ const CustomTooltip = ({
   if (!active || !payload?.length) return null;
 
   return (
-    <div className="rounded-lg border bg-background p-2.5 shadow-lg text-sm">
+    <div className="rounded-lg border bg-popover p-2.5 text-sm shadow-lg">
       <p className="font-medium">{getPlatformLabel(payload[0].name)}</p>
-      <p className="text-muted-foreground">{formatCurrency(payload[0].value)}</p>
+      <p className="tabular-nums text-muted-foreground">{formatCurrency(payload[0].value)}</p>
     </div>
   );
 };
@@ -53,53 +40,79 @@ export function PlatformPieChart({
 }: PlatformPieChartProps) {
   const totalSpend = data.reduce((sum, d) => sum + d.spend, 0);
 
-  const chartData = data.map((d) => ({
-    name: d.platform,
-    value: d.spend,
-    label: getPlatformLabel(d.platform),
-    color: PLATFORM_COLORS[d.platform] ?? DEFAULT_COLORS[0],
-  }));
+  const chartData = data
+    .filter((d) => d.spend > 0)
+    .sort((a, b) => b.spend - a.spend)
+    .map((d) => ({
+      name: d.platform,
+      value: d.spend,
+      color: getPlatformColor(d.platform),
+      share: totalSpend > 0 ? (d.spend / totalSpend) * 100 : 0,
+    }));
 
   return (
-    <Card>
+    <Card className="h-full">
       <CardHeader>
         <CardTitle>{title}</CardTitle>
-        <CardDescription>
-          {description} — Total: {formatCurrency(totalSpend)}
-        </CardDescription>
+        <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent>
         {chartData.length === 0 ? (
-          <div className="flex items-center justify-center h-[200px] text-sm text-muted-foreground">
-            No spend data available
+          <div className="flex h-[280px] flex-col items-center justify-center gap-2 rounded-lg border border-dashed text-muted-foreground">
+            <PieChartIcon className="h-8 w-8 opacity-40" />
+            <p className="text-sm font-medium">No spend data yet</p>
           </div>
         ) : (
-          <ResponsiveContainer width="100%" height={240}>
-            <PieChart>
-              <Pie
-                data={chartData}
-                cx="50%"
-                cy="50%"
-                innerRadius={60}
-                outerRadius={90}
-                paddingAngle={3}
-                dataKey="value"
-              >
-                {chartData.map((entry, index) => (
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={entry.color}
-                    strokeWidth={0}
-                  />
-                ))}
-              </Pie>
-              <Tooltip content={<CustomTooltip />} />
-              <Legend
-                formatter={(value) => getPlatformLabel(value)}
-                wrapperStyle={{ fontSize: 12 }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
+          <>
+            <div className="relative">
+              <ResponsiveContainer width="100%" height={190}>
+                <PieChart>
+                  <Pie
+                    data={chartData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={62}
+                    outerRadius={86}
+                    paddingAngle={chartData.length > 1 ? 3 : 0}
+                    dataKey="value"
+                    stroke="none"
+                  >
+                    {chartData.map((entry) => (
+                      <Cell key={entry.name} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip content={<CustomTooltip />} />
+                </PieChart>
+              </ResponsiveContainer>
+              {/* Total in the donut hole */}
+              <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+                <span className="text-xs text-muted-foreground">Total</span>
+                <span className="text-xl font-semibold tabular-nums">
+                  {formatCurrency(totalSpend, "INR", true)}
+                </span>
+              </div>
+            </div>
+
+            <ul className="mt-4 space-y-3">
+              {chartData.map((entry) => (
+                <li key={entry.name} className="space-y-1.5">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="flex items-center gap-2">
+                      <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: entry.color }} />
+                      {getPlatformLabel(entry.name)}
+                    </span>
+                    <span className="tabular-nums">
+                      <span className="font-medium">{formatCurrency(entry.value, "INR", true)}</span>
+                      <span className="ml-2 text-xs text-muted-foreground">{entry.share.toFixed(0)}%</span>
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div className="h-full rounded-full" style={{ width: `${entry.share}%`, backgroundColor: entry.color }} />
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </>
         )}
       </CardContent>
     </Card>

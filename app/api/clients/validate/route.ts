@@ -41,7 +41,7 @@ export async function POST(request: Request) {
     const raw = error instanceof Error ? error.message : "Validation failed";
     // Surface credential config errors more clearly
     const message = raw.toLowerCase().includes("refresh token") || raw.toLowerCase().includes("unauthorized")
-      ? "Google Ads credentials error: the GOOGLE_ADS_REFRESH_TOKEN in .env.local is invalid or expired. Generate a new one via Google OAuth."
+      ? "Google Ads credentials error: the GOOGLE_ADS_REFRESH_TOKEN in .env is invalid or expired. Generate a new one via Google OAuth."
       : raw;
     return NextResponse.json({ valid: false, error: message }, { status: 200 });
   }
@@ -52,7 +52,7 @@ export async function POST(request: Request) {
 async function validateGoogleAccount(accountId: string) {
   if (!process.env.GOOGLE_ADS_REFRESH_TOKEN) {
     return NextResponse.json(
-      { valid: false, error: "GOOGLE_ADS_REFRESH_TOKEN is not configured in .env.local" },
+      { valid: false, error: "GOOGLE_ADS_REFRESH_TOKEN is not configured in .env" },
       { status: 200 }
     );
   }
@@ -100,7 +100,8 @@ async function validateGoogleAccount(accountId: string) {
 
 // ── Meta ─────────────────────────────────────────────────────
 
-async function validateMetaAccount(accountId: string, accessToken?: string) {
+async function validateMetaAccount(accountId: string, clientToken?: string) {
+  const accessToken = clientToken || process.env.META_ACCESS_TOKEN;
   if (!accessToken) {
     return NextResponse.json(
       { valid: false, error: "Access token is required to validate a Meta Ads account" },

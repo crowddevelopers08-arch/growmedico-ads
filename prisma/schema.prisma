@@ -39,17 +39,23 @@ model Client {
   email        String?
   phone        String?
   whatsappPhone String?   // WhatsApp number in E.164 format (e.g. +1234567890)
+  metaPageId   String?    @unique // Facebook Page ID — routes Meta lead form webhooks to this client
   platform     Platform
   accountId    String     // Google/Meta account ID
   accessToken  String?    // Encrypted OAuth access token
   refreshToken String?    // Encrypted OAuth refresh token
   tokenExpiry  DateTime?
   isActive     Boolean    @default(true)
-  balance      Float      @default(0)  // Account prepaid balance fetched from platform API
+  balance      Float      @default(0)  // Available prepaid funds (0 for postpaid accounts)
+  isPrepaid    Boolean?               // null = unknown / not fetched (e.g. Google)
+  amountDue    Float      @default(0)  // Unbilled spend owed on postpaid (card/invoice) accounts
+  fundingLabel String?                // e.g. "VISA *2991", "monthly invoicing"
+  balanceUpdatedAt DateTime?
   notes        String?
   campaigns    Campaign[]
   alerts       Alert[]
   syncLogs     SyncLog[]
+  leads        Lead[]
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
 
@@ -139,6 +145,32 @@ model SyncLog {
 }
 
 // ============================================================
+// Leads
+// ============================================================
+
+model Lead {
+  id         String     @id @default(cuid())
+  clientId   String
+  client     Client     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  source     LeadSource
+  name       String?
+  phone      String?
+  email      String?
+  message    String?
+  campaign   String?    // Campaign / form / page name the lead came from
+  externalId String?    // Platform lead ID (e.g. Meta leadgen_id) — used for dedupe
+  metadata   Json?      // Raw form fields / extra context
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@unique([source, externalId])
+  @@index([clientId, createdAt])
+  @@index([source])
+  @@index([createdAt])
+  @@map("leads")
+}
+
+// ============================================================
 // Enums
 // ============================================================
 
@@ -171,6 +203,12 @@ enum Severity {
   INFO
   WARNING
   CRITICAL
+}
+
+enum LeadSource {
+  WHATSAPP
+  META_FORM
+  WEBSITE
 }
 
 enum SyncStatus {

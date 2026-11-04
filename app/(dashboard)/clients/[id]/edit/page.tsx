@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import type { Metadata } from "next";
 import { prisma } from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
+import { PageHeader } from "@/components/shared/PageHeader";
 import { ClientForm } from "@/components/clients/ClientForm";
 
 interface Params {
@@ -21,15 +22,13 @@ export default async function EditClientPage({ params }: Params) {
   if (!client) notFound();
 
   return (
-    <div className="flex flex-col h-full">
-      <Header title={`Edit — ${client.name}`} />
-      <div className="flex-1 overflow-y-auto p-4 md:p-6 max-w-5xl mx-auto w-full animate-fade-in">
-        <div className="mb-6">
-          <h2 className="text-xl font-semibold">Edit Client</h2>
-          <p className="text-sm text-muted-foreground">
-            Update settings for <strong>{client.name}</strong>.
-          </p>
-        </div>
+    <div className="flex flex-col">
+      <Header title={`Edit ${client.name}`} parent={{ label: "Clients", href: "/clients" }} />
+      <div className="mx-auto w-full max-w-5xl space-y-6 p-4 animate-fade-in md:p-8">
+        <PageHeader
+          title="Edit client"
+          description={<>Update account and notification settings for <strong className="font-medium text-foreground">{client.name}</strong>.</>}
+        />
         <ClientForm client={client} mode="edit" />
       </div>
     </div>

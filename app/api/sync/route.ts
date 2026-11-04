@@ -12,10 +12,22 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { fetchGoogleCampaigns, getMccAccessToken } from "@/lib/googleAds";
-import { fetchMetaCampaigns, fetchMetaAccountBalance, fetchMetaDailyInsights } from "@/lib/metaAds";
+import { fetchGoogleCampaigns, fetchGoogleDailyStats, getMccAccessToken } from "@/lib/googleAds";
+import {
+  DAILY_STATS_DAYS,
+  fetchMetaCampaigns,
+  fetchMetaAccountBalance,
+  fetchMetaDailyInsights,
+  fetchMetaAccountLeads,
+  normalizeMetaLead,
+  resolveMetaAccessToken,
+} from "@/lib/metaAds";
 import { runAlertEngine } from "@/lib/alertEngine";
-import type { RawCampaignData } from "@/types";
+import { Prisma } from "@prisma/client";
+import { randomUUID } from "crypto";
+import type { DailyStatEntry, RawCampaignData } from "@/types";
+
+const SYNC_CONCURRENCY = 3;
 
 // ── POST /api/sync ──────────────────────────────────────────
 export async function POST(request: Request) {
@@ -45,9 +57,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ message: "No active clients found", synced: 0 });
     }
 
-    const results = await Promise.allSettled(
-      clients.map((client) => syncClient(client))
-    );
+    // A few clients at a time so a full sync can't hog the DB connection pool
+    const results = await runWithConcurrency(clients, SYNC_CONCURRENCY, syncClient);
 
     const succeeded = results.filter((r) => r.status === "fulfilled").length;
     const failed = results.filter((r) => r.status === "rejected").length;
@@ -65,6 +76,140 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error("[POST /api/sync]", error);
     return NextResponse.json({ error: "Sync failed" }, { status: 500 });
+  }
+}
+
+/**
+ * Turn a raw error into a short, human-readable reason for the alert list.
+ * Prisma validation errors dump the whole query and their last line is often
+ * misleading (a NaN field surfaces as "Argument `client` is missing"), so
+ * those get a plain description instead.
+ */
+function summarizeSyncError(message: string): string {
+  if (message.includes("Invalid `prisma.")) {
+    return message.includes("NaN")
+      ? "the ad platform returned an invalid number (NaN) for a campaign metric"
+      : "the database rejected the campaign data returned by the ad platform";
+  }
+  const firstLine = message.split("\n").map((l) => l.trim()).find(Boolean) ?? "Unknown error";
+  return firstLine.length > 200 ? `${firstLine.slice(0, 197)}…` : firstLine;
+}
+
+// ── Bulk campaign upsert ────────────────────────────────────
+
+const UPSERT_CHUNK_SIZE = 200;
+
+/**
+ * Insert-or-update all campaigns for a client with INSERT … ON CONFLICT,
+ * chunked. Per-row Prisma upserts cost a DB round trip each, which on a slow
+ * link held pool connections for minutes and starved page requests.
+ * Matches the previous upsert semantics: roas/startDate/endDate are only set
+ * when a campaign is first created.
+ */
+async function upsertCampaigns(
+  clientId: string,
+  platform: string,
+  campaigns: RawCampaignData[],
+  dailyStatsMap: Map<string, DailyStatEntry[]>
+) {
+  const now = new Date();
+
+  for (let i = 0; i < campaigns.length; i += UPSERT_CHUNK_SIZE) {
+    const rows = campaigns.slice(i, i + UPSERT_CHUNK_SIZE).map((c) => {
+      const ctr = c.clicks > 0 && c.impressions > 0 ? (c.clicks / c.impressions) * 100 : 0;
+      const cpc = c.clicks > 0 ? c.spend / c.clicks : 0;
+      const cpa = c.conversions > 0 ? c.spend / c.conversions : 0;
+      const roas = c.spend > 0 ? (c.conversions * 10) / c.spend : 0;
+      const dailyStats = JSON.stringify(dailyStatsMap.get(c.externalId) ?? []);
+
+      return Prisma.sql`(
+        ${randomUUID()}, ${clientId}, ${c.externalId}, ${c.name},
+        ${c.status}::"CampaignStatus", ${platform}::"Platform",
+        ${c.dailyBudget}, ${c.totalBudget}, ${c.spend},
+        ${Math.round(c.clicks)}, ${Math.round(c.impressions)}, ${Math.round(c.conversions)},
+        ${ctr}, ${cpc}, ${cpa}, ${roas}, ${dailyStats}::jsonb,
+        ${c.startDate ? new Date(c.startDate) : null}::timestamp, ${c.endDate ? new Date(c.endDate) : null}::timestamp,
+        ${now}, ${now}, ${now}
+      )`;
+    });
+
+    await prisma.$executeRaw`
+      INSERT INTO "campaigns" (
+        "id", "clientId", "externalId", "name", "status", "platform",
+        "dailyBudget", "totalBudget", "spend", "clicks", "impressions", "conversions",
+        "ctr", "cpc", "cpa", "roas", "dailyStats", "startDate", "endDate",
+        "lastSynced", "createdAt", "updatedAt"
+      )
+      VALUES ${Prisma.join(rows)}
+      ON CONFLICT ("clientId", "externalId") DO UPDATE SET
+        "name" = EXCLUDED."name",
+        "status" = EXCLUDED."status",
+        "dailyBudget" = EXCLUDED."dailyBudget",
+        "totalBudget" = EXCLUDED."totalBudget",
+        "spend" = EXCLUDED."spend",
+        "clicks" = EXCLUDED."clicks",
+        "impressions" = EXCLUDED."impressions",
+        "conversions" = EXCLUDED."conversions",
+        "ctr" = EXCLUDED."ctr",
+        "cpc" = EXCLUDED."cpc",
+        "cpa" = EXCLUDED."cpa",
+        "dailyStats" = EXCLUDED."dailyStats",
+        "lastSynced" = EXCLUDED."lastSynced",
+        "updatedAt" = EXCLUDED."updatedAt"
+    `;
+  }
+}
+
+/** Run async tasks with at most `limit` in flight; results in input order. */
+async function runWithConcurrency<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>) {
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      try {
+        results[i] = { status: "fulfilled", value: await task(items[i]) };
+      } catch (reason) {
+        results[i] = { status: "rejected", reason };
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+// ── Meta lead form sync ─────────────────────────────────────
+
+/** Meta deletes Lead Ads submissions after 90 days, so there's nothing older to fetch. */
+const META_LEAD_RETENTION_DAYS = 90;
+/** Re-read a little before the newest stored lead to catch late-indexed submissions. */
+const META_LEAD_OVERLAP_MS = 2 * 24 * 60 * 60 * 1000;
+
+/**
+ * Pull new Lead Ads submissions for a Meta account. Non-fatal: a token without
+ * leads_retrieval shouldn't fail the campaign sync, so errors are only logged.
+ */
+async function syncMetaLeads(clientId: string, accountId: string, token: string) {
+  try {
+    const latest = await prisma.lead.findFirst({
+      where: { clientId, source: "META_FORM" },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    });
+    const oldest = Date.now() - META_LEAD_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+    const since = new Date(Math.max(oldest, (latest?.createdAt.getTime() ?? 0) - META_LEAD_OVERLAP_MS));
+
+    const leads = await fetchMetaAccountLeads(accountId, token, since);
+    if (leads.length === 0) return;
+
+    // (source, externalId) is unique, so already-stored leads are skipped
+    const { count } = await prisma.lead.createMany({
+      data: leads.map((l) => ({ clientId, ...normalizeMetaLead(l) })),
+      skipDuplicates: true,
+    });
+    console.log(`📥 Meta leads for ${accountId}: ${count} new of ${leads.length} fetched`);
+  } catch (error) {
+    console.warn(`[Meta leads] ${accountId}:`, error instanceof Error ? error.message : error);
   }
 }
 
@@ -86,71 +231,30 @@ async function syncClient(client: Awaited<ReturnType<typeof prisma.client.findFi
     // Fetch from the appropriate platform
     if (client.platform === "GOOGLE") {
       const accessToken = await getMccAccessToken();
-      campaigns = await fetchGoogleCampaigns(client.accountId, accessToken);
+      [campaigns, dailyStatsMap] = await Promise.all([
+        fetchGoogleCampaigns(client.accountId, accessToken),
+        fetchGoogleDailyStats(client.accountId, accessToken, DAILY_STATS_DAYS),
+      ]);
     } else if (client.platform === "META") {
-      if (!client.accessToken) throw new Error("No access token for Meta Ads. Edit the client and add the long-lived access token.");
-      const [metaCampaigns, balance, dailyInsights] = await Promise.all([
-        fetchMetaCampaigns(client.accountId, client.accessToken),
-        fetchMetaAccountBalance(client.accountId, client.accessToken),
-        fetchMetaDailyInsights(client.accountId, client.accessToken),
+      const token = resolveMetaAccessToken(client.accessToken);
+      if (!token) throw new Error("No access token for Meta Ads. Add one to the client or set META_ACCESS_TOKEN in .env.");
+      const [metaCampaigns, funding, dailyInsights] = await Promise.all([
+        fetchMetaCampaigns(client.accountId, token),
+        fetchMetaAccountBalance(client.accountId, token),
+        fetchMetaDailyInsights(client.accountId, token),
       ]);
       campaigns = metaCampaigns;
       dailyStatsMap = dailyInsights;
       await prisma.client.update({
         where: { id: client.id },
-        data: { balance },
+        data: { ...funding, balanceUpdatedAt: new Date() },
       });
+      await syncMetaLeads(client.id, client.accountId, token);
     }
 
-    // Upsert campaigns into DB
-    let recordsUpdated = 0;
-    for (const campaign of campaigns) {
-      const dailyStats = dailyStatsMap.get(campaign.externalId) ?? [];
-      await prisma.campaign.upsert({
-        where: { clientId_externalId: { clientId: client.id, externalId: campaign.externalId } },
-        create: {
-          clientId: client.id,
-          externalId: campaign.externalId,
-          name: campaign.name,
-          status: campaign.status,
-          platform: client.platform,
-          dailyBudget: campaign.dailyBudget,
-          totalBudget: campaign.totalBudget,
-          spend: campaign.spend,
-          clicks: campaign.clicks,
-          impressions: campaign.impressions,
-          conversions: campaign.conversions,
-          ctr: campaign.clicks > 0 && campaign.impressions > 0
-            ? (campaign.clicks / campaign.impressions) * 100
-            : 0,
-          cpc: campaign.clicks > 0 ? campaign.spend / campaign.clicks : 0,
-          cpa: campaign.conversions > 0 ? campaign.spend / campaign.conversions : 0,
-          roas: campaign.spend > 0 ? (campaign.conversions * 10) / campaign.spend : 0,
-          startDate: campaign.startDate ? new Date(campaign.startDate) : null,
-          endDate: campaign.endDate ? new Date(campaign.endDate) : null,
-          dailyStats,
-          lastSynced: new Date(),
-        },
-        update: {
-          name: campaign.name,
-          status: campaign.status,
-          dailyBudget: campaign.dailyBudget,
-          totalBudget: campaign.totalBudget,
-          spend: campaign.spend,
-          clicks: campaign.clicks,
-          impressions: campaign.impressions,
-          conversions: campaign.conversions,
-          ctr: campaign.clicks > 0 && campaign.impressions > 0
-            ? (campaign.clicks / campaign.impressions) * 100
-            : 0,
-          cpc: campaign.clicks > 0 ? campaign.spend / campaign.clicks : 0,
-          cpa: campaign.conversions > 0 ? campaign.spend / campaign.conversions : 0,
-          dailyStats,
-          lastSynced: new Date(),
-        },
-      });
-      recordsUpdated++;
-    }
+    // Upsert campaigns into DB in bulk — one statement per chunk instead of one per campaign
+    await upsertCampaigns(client.id, client.platform, campaigns, dailyStatsMap);
+    const recordsUpdated = campaigns.length;
 
     // Run alert engine on updated campaigns
     const dbCampaigns = await prisma.campaign.findMany({
@@ -183,16 +287,30 @@ async function syncClient(client: Awaited<ReturnType<typeof prisma.client.findFi
       },
     });
 
-    // Create sync error alert
-    await prisma.alert.create({
-      data: {
-        clientId: client.id,
-        type: "SYNC_ERROR",
-        severity: "CRITICAL",
-        message: `Failed to sync data for ${client.name}: ${message}`,
-        metadata: { error: message },
-      },
+    // One unread sync-error alert per client: refresh it instead of piling up duplicates
+    // on every cron run. The full error stays in metadata and the sync log.
+    const alertMessage = `Failed to sync data for ${client.name}: ${summarizeSyncError(message)}`;
+    const existing = await prisma.alert.findFirst({
+      where: { clientId: client.id, type: "SYNC_ERROR", isRead: false },
+      select: { id: true },
     });
+
+    if (existing) {
+      await prisma.alert.update({
+        where: { id: existing.id },
+        data: { message: alertMessage, metadata: { error: message }, createdAt: new Date() },
+      });
+    } else {
+      await prisma.alert.create({
+        data: {
+          clientId: client.id,
+          type: "SYNC_ERROR",
+          severity: "CRITICAL",
+          message: alertMessage,
+          metadata: { error: message },
+        },
+      });
+    }
 
     throw error;
   }

@@ -8,17 +8,21 @@ import { SpendChart } from "@/components/dashboard/SpendChart";
 import { BudgetProgress } from "@/components/dashboard/BudgetProgress";
 import { RecentAlerts } from "@/components/dashboard/RecentAlerts";
 import { StatsCard } from "@/components/dashboard/StatsCard";
-import { Badge } from "@/components/ui/badge";
+import { LeadsView } from "@/components/leads/LeadsView";
+import { SyncButton } from "@/components/shared/SyncButton";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import {
-  Edit, RefreshCw, DollarSign, MousePointerClick,
-  TrendingUp, Activity, Mail, Phone, Building2,
+  Edit, IndianRupee, MousePointerClick,
+  Target, Activity, Mail, Phone, Building2, CalendarDays, Wallet, CreditCard,
 } from "lucide-react";
 import {
-  formatCurrency, formatNumber, getPlatformLabel,
-  getPlatformColor, safeJsonParse, formatDate,
+  cn, formatCurrency, formatNumber, formatPercent, getPlatformLabel,
+  getPlatformColor, safeJsonParse, formatDate, formatRelativeTime,
 } from "@/lib/utils";
+import {
+  balanceCaption, balanceLabel, balanceToneClass, balanceValue, getBalanceTone,
+} from "@/components/clients/BalanceInfo";
 import type { CampaignWithClient, AlertWithClient, ChartDataPoint, DailyStatEntry } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -52,6 +56,7 @@ async function getClientData(id: string) {
   const totalSpend = client.campaigns.reduce((s, c) => s + c.spend, 0);
   const totalConversions = client.campaigns.reduce((s, c) => s + c.conversions, 0);
   const totalClicks = client.campaigns.reduce((s, c) => s + c.clicks, 0);
+  const totalImpressions = client.campaigns.reduce((s, c) => s + c.impressions, 0);
   const activeCampaigns = client.campaigns.filter((c) => c.status === "ACTIVE").length;
 
   // Merge daily stats for chart
@@ -78,9 +83,22 @@ async function getClientData(id: string) {
 
   return {
     client,
-    stats: { totalSpend, totalConversions, totalClicks, activeCampaigns },
+    stats: {
+      totalSpend, totalConversions, totalClicks, activeCampaigns,
+      costPerConversion: totalConversions > 0 ? totalSpend / totalConversions : 0,
+      ctr: totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0,
+    },
     chartData,
   };
+}
+
+function SectionHeading({ title, description }: { title: string; description: string }) {
+  return (
+    <div>
+      <h2 className="text-lg font-semibold tracking-tight">{title}</h2>
+      <p className="text-sm text-muted-foreground">{description}</p>
+    </div>
+  );
 }
 
 export default async function ClientDetailPage({ params }: Params) {
@@ -91,97 +109,112 @@ export default async function ClientDetailPage({ params }: Params) {
 
   const { client, stats, chartData } = data;
   const platformColor = getPlatformColor(client.platform);
+  const balanceTone = getBalanceTone(client);
+  const initials = client.name.split(/\s+/).map((w) => w[0]).join("").toUpperCase().slice(0, 2);
 
   return (
-    <div className="flex flex-col h-full">
-      <Header title={client.name} />
+    <div className="flex flex-col">
+      <Header title={client.name} parent={{ label: "Clients", href: "/clients" }} />
 
-      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 animate-fade-in">
-        {/* Client header card */}
-        <Card className="overflow-hidden">
-          <div className="h-1.5" style={{ backgroundColor: platformColor }} />
-          <CardContent className="p-6">
-            <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-              <div className="space-y-3">
-                <div className="flex items-center gap-3 flex-wrap">
-                  <h2 className="text-2xl font-bold">{client.name}</h2>
-                  <Badge
-                    className="text-white font-medium"
-                    style={{ backgroundColor: platformColor }}
-                  >
-                    {getPlatformLabel(client.platform)}
-                  </Badge>
-                  {!client.isActive && (
-                    <Badge variant="secondary">Inactive</Badge>
-                  )}
-                </div>
-
-                <div className="flex flex-wrap gap-4 text-sm text-muted-foreground">
-                  {client.company && (
-                    <div className="flex items-center gap-1.5">
-                      <Building2 className="h-3.5 w-3.5" />
-                      {client.company}
-                    </div>
-                  )}
-                  {client.email && (
-                    <div className="flex items-center gap-1.5">
-                      <Mail className="h-3.5 w-3.5" />
-                      {client.email}
-                    </div>
-                  )}
-                  {client.phone && (
-                    <div className="flex items-center gap-1.5">
-                      <Phone className="h-3.5 w-3.5" />
-                      {client.phone}
-                    </div>
-                  )}
-                  <div className="flex items-center gap-1.5">
-                    <code className="text-xs bg-muted px-2 py-0.5 rounded font-mono">
-                      {client.accountId}
-                    </code>
-                  </div>
-                </div>
-
-                <p className="text-xs text-muted-foreground">
-                  Added {formatDate(client.createdAt)}
-                </p>
+      <div className="mx-auto w-full max-w-[1400px] space-y-8 p-4 animate-fade-in md:p-8">
+        {/* Client profile */}
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex items-start gap-4">
+            <div
+              className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl text-lg font-semibold text-white shadow-sm"
+              style={{ backgroundColor: platformColor }}
+              aria-hidden
+            >
+              {initials}
+            </div>
+            <div className="min-w-0 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-semibold tracking-tight">{client.name}</h1>
+                <span
+                  className="rounded-full px-2.5 py-0.5 text-xs font-medium"
+                  style={{ backgroundColor: `${platformColor}1a`, color: platformColor }}
+                >
+                  {getPlatformLabel(client.platform)}
+                </span>
+                {!client.isActive && (
+                  <span className="rounded-full bg-slate-500/10 px-2.5 py-0.5 text-xs font-medium text-slate-600 dark:text-slate-400">
+                    Inactive
+                  </span>
+                )}
               </div>
 
-              <div className="flex items-center gap-2 shrink-0">
-                <form action={`/api/sync?id=${client.id}`} method="POST">
-                  <Button variant="outline" size="sm" className="gap-2 h-9">
-                    <RefreshCw className="h-3.5 w-3.5" />
-                    Sync
-                  </Button>
-                </form>
-                <Link href={`/clients/${client.id}/edit`}>
-                  <Button size="sm" className="gap-2 h-9">
-                    <Edit className="h-3.5 w-3.5" />
-                    Edit
-                  </Button>
-                </Link>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm text-muted-foreground">
+                {client.company && (
+                  <span className="flex items-center gap-1.5">
+                    <Building2 className="h-3.5 w-3.5" />
+                    {client.company}
+                  </span>
+                )}
+                {client.email && (
+                  <a href={`mailto:${client.email}`} className="flex items-center gap-1.5 hover:text-primary">
+                    <Mail className="h-3.5 w-3.5" />
+                    {client.email}
+                  </a>
+                )}
+                {client.phone && (
+                  <a href={`tel:${client.phone}`} className="flex items-center gap-1.5 hover:text-primary">
+                    <Phone className="h-3.5 w-3.5" />
+                    {client.phone}
+                  </a>
+                )}
+                <span className="flex items-center gap-1.5">
+                  <CalendarDays className="h-3.5 w-3.5" />
+                  Added {formatDate(client.createdAt)}
+                </span>
+                <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-xs" title="Ad account ID">
+                  {client.accountId}
+                </code>
               </div>
             </div>
-          </CardContent>
-        </Card>
+          </div>
 
-        {/* Stats row */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="flex shrink-0 items-center gap-2">
+            <SyncButton clientId={client.id} />
+            <Button asChild>
+              <Link href={`/clients/${client.id}/edit`}>
+                <Edit />
+                Edit client
+              </Link>
+            </Button>
+          </div>
+        </div>
+
+        {/* KPIs */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
+          <StatsCard
+            title={balanceLabel(client)}
+            value={balanceValue(client)}
+            subtitle={
+              <span className={cn(["critical", "warning"].includes(balanceTone) && balanceToneClass[balanceTone])}>
+                {balanceCaption(client)}
+                {client.balanceUpdatedAt && <span className="text-muted-foreground"> · {formatRelativeTime(client.balanceUpdatedAt)}</span>}
+              </span>
+            }
+            icon={balanceTone === "postpaid" ? CreditCard : Wallet}
+            variant={balanceTone === "critical" ? "danger" : balanceTone === "warning" ? "warning" : "success"}
+          />
           <StatsCard
             title="Total Spend"
             value={formatCurrency(stats.totalSpend, "INR", true)}
-            icon={DollarSign}
-            variant="default"
+            subtitle="Lifetime"
+            icon={IndianRupee}
           />
           <StatsCard
-            title="Total Conversions"
+            title="Conversions"
             value={formatNumber(stats.totalConversions)}
-            icon={TrendingUp}
+            subtitle={stats.costPerConversion > 0 ? `${formatCurrency(stats.costPerConversion)} per conversion` : "No conversions yet"}
+            icon={Target}
             variant="success"
           />
           <StatsCard
-            title="Total Clicks"
+            title="Clicks"
             value={formatNumber(stats.totalClicks, true)}
+            subtitle={`${formatPercent(stats.ctr)} CTR`}
             icon={MousePointerClick}
             variant="info"
           />
@@ -190,17 +223,26 @@ export default async function ClientDetailPage({ params }: Params) {
             value={String(stats.activeCampaigns)}
             subtitle={`of ${client.campaigns.length} total`}
             icon={Activity}
-            variant="default"
+            variant="warning"
           />
         </div>
+
+        {/* Unread alerts first — they're the most actionable thing on the page */}
+        {client.alerts.length > 0 && (
+          <RecentAlerts
+            alerts={client.alerts as AlertWithClient[]}
+            title="Unread Alerts"
+            description={`${client.alerts.length} alert${client.alerts.length !== 1 ? "s" : ""} for this client`}
+          />
+        )}
 
         {/* Chart + Budget */}
         <div className="grid gap-4 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <SpendChart
               data={chartData}
-              title={`${client.name} — Spend (Last 30 Days)`}
-              description="Daily spend and conversion performance"
+              title="Spend & Conversions"
+              description="Daily totals for the last 30 days"
             />
           </div>
           <BudgetProgress campaigns={client.campaigns} />
@@ -213,18 +255,18 @@ export default async function ClientDetailPage({ params }: Params) {
             client: { id: client.id, name: client.name, platform: client.platform },
           })) as CampaignWithClient[]}
           title="Campaigns"
-          description={`All campaigns for ${client.name}`}
+          description={`${client.campaigns.length} campaign${client.campaigns.length !== 1 ? "s" : ""}, highest spend first`}
           showClientColumn={false}
         />
 
-        {/* Alerts */}
-        {client.alerts.length > 0 && (
-          <RecentAlerts
-            alerts={client.alerts as AlertWithClient[]}
-            title="Unread Alerts"
-            description="Alerts for this client"
+        {/* Leads */}
+        <section className="space-y-4">
+          <SectionHeading
+            title="Leads"
+            description={`WhatsApp, Meta Lead Form and website enquiries for ${client.name}`}
           />
-        )}
+          <LeadsView clientId={client.id} />
+        </section>
       </div>
     </div>
   );

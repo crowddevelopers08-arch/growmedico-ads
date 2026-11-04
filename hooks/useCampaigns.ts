@@ -18,7 +18,7 @@ interface UseCampaignsReturn {
 }
 
 export function useCampaigns(options: UseCampaignsOptions = {}): UseCampaignsReturn {
-  const { clientId, platform, status, search, page = 1, pageSize = 20 } = options;
+  const { clientId, platform, status, search, from, to, sortBy, sortOrder, page = 1, pageSize = 20 } = options;
 
   const [campaigns, setCampaigns] = useState<CampaignWithClient[]>([]);
   const [total, setTotal] = useState(0);
@@ -36,6 +36,10 @@ export function useCampaigns(options: UseCampaignsOptions = {}): UseCampaignsRet
       if (platform) params.set("platform", platform);
       if (status) params.set("status", status);
       if (search) params.set("search", search);
+      if (from) params.set("from", from);
+      if (to) params.set("to", to);
+      if (sortBy) params.set("sortBy", sortBy);
+      if (sortOrder) params.set("sortOrder", sortOrder);
       params.set("page", String(page));
       params.set("pageSize", String(pageSize));
 
@@ -51,7 +55,7 @@ export function useCampaigns(options: UseCampaignsOptions = {}): UseCampaignsRet
     } finally {
       setIsLoading(false);
     }
-  }, [clientId, platform, status, search, page, pageSize]);
+  }, [clientId, platform, status, search, from, to, sortBy, sortOrder, page, pageSize]);
 
   useEffect(() => {
     fetchCampaigns();

@@ -13,7 +13,7 @@
  *                                   This single token accesses all managed client accounts.
  */
 
-import type { RawCampaignData, GoogleAdsCampaign } from "@/types";
+import type { RawCampaignData, GoogleAdsCampaign, DailyStatEntry } from "@/types";
 import { microsToAmount } from "@/lib/utils";
 
 const GOOGLE_ADS_API_VERSION = "v18";
@@ -113,6 +113,71 @@ export async function fetchGoogleCampaigns(
   return campaigns;
 }
 
+/**
+ * Fetch day-by-day metrics for every campaign over the last `days` days.
+ * Returns a map of externalCampaignId → DailyStatEntry[]. Non-fatal: on error
+ * the map is empty and the chart / date filter just show nothing.
+ */
+export async function fetchGoogleDailyStats(
+  customerId: string,
+  accessToken: string,
+  days: number
+): Promise<Map<string, DailyStatEntry[]>> {
+  const start = new Date();
+  start.setDate(start.getDate() - (days - 1));
+  const query = `
+    SELECT campaign.id, segments.date, metrics.cost_micros, metrics.clicks, metrics.impressions, metrics.conversions
+    FROM campaign
+    WHERE segments.date BETWEEN '${start.toISOString().split("T")[0]}' AND '${new Date().toISOString().split("T")[0]}'
+      AND campaign.status != 'REMOVED'
+  `.trim();
+
+  const map = new Map<string, DailyStatEntry[]>();
+
+  const response = await fetch(
+    `${GOOGLE_ADS_BASE_URL}/customers/${customerId.replace(/-/g, "")}/googleAds:searchStream`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "developer-token": process.env.GOOGLE_ADS_DEVELOPER_TOKEN!,
+        "login-customer-id": process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID!,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ query }),
+    }
+  );
+
+  if (!response.ok) {
+    console.warn(`[Google Daily Stats] Failed: ${response.status}`);
+    return map;
+  }
+
+  // searchStream returns a JSON array of result batches
+  const batches = (await response.json().catch(() => [])) as {
+    results?: (GoogleAdsCampaign & { segments?: { date?: string } })[];
+  }[];
+
+  for (const batch of Array.isArray(batches) ? batches : [batches]) {
+    for (const row of batch.results ?? []) {
+      const date = row.segments?.date;
+      if (!date) continue;
+      const id = row.campaign.id;
+      if (!map.has(id)) map.set(id, []);
+      map.get(id)!.push({
+        date,
+        spend: microsToAmount(row.metrics?.costMicros ?? 0),
+        clicks: Number(row.metrics?.clicks ?? 0),
+        impressions: Number(row.metrics?.impressions ?? 0),
+        conversions: Number(row.metrics?.conversions ?? 0),
+      });
+    }
+  }
+
+  for (const stats of map.values()) stats.sort((a, b) => a.date.localeCompare(b.date));
+  return map;
+}
+
 // ── Query builder ───────────────────────────────────────────
 
 function buildGaqlQuery({ startDate, endDate }: { startDate: string; endDate: string }): string {
@@ -203,7 +268,7 @@ export async function getMccAccessToken(): Promise<string> {
   const refreshToken = process.env.GOOGLE_ADS_REFRESH_TOKEN;
   if (!refreshToken) {
     throw new Error(
-      "GOOGLE_ADS_REFRESH_TOKEN is not set. Add the MCC account owner's refresh token to .env.local"
+      "GOOGLE_ADS_REFRESH_TOKEN is not set. Add the MCC account owner's refresh token to .env"
     );
   }
   const { accessToken } = await refreshGoogleAccessToken(refreshToken);

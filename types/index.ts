@@ -2,10 +2,10 @@
 // AdPulse - Global TypeScript Types
 // ============================================================
 
-import type { Campaign, Client, Alert, Platform, CampaignStatus, AlertType, Severity, SyncStatus } from "@prisma/client";
+import type { Campaign, Client, Alert, Lead, Platform, CampaignStatus, AlertType, Severity, SyncStatus, LeadSource } from "@prisma/client";
 
 // Re-export Prisma enums for convenience
-export type { Platform, CampaignStatus, AlertType, Severity, SyncStatus };
+export type { Platform, CampaignStatus, AlertType, Severity, SyncStatus, LeadSource };
 
 // ============================================================
 // Extended Prisma Types
@@ -26,6 +26,10 @@ export type CampaignWithClient = Campaign & {
 
 export type AlertWithClient = Alert & {
   client: Pick<Client, "id" | "name" | "platform">;
+};
+
+export type LeadWithClient = Lead & {
+  client: Pick<Client, "id" | "name">;
 };
 
 // ============================================================
@@ -120,6 +124,31 @@ export interface CampaignFilters {
   platform?: Platform;
   status?: CampaignStatus;
   search?: string;
+  /** YYYY-MM-DD, inclusive — metrics are summed from stored daily stats */
+  from?: string;
+  to?: string;
+  sortBy?: CampaignSortField;
+  sortOrder?: "asc" | "desc";
+}
+
+export type CampaignSortField =
+  | "spend" | "clicks" | "impressions" | "conversions"
+  | "ctr" | "cpc" | "name" | "lastSynced";
+
+// ---- Lead API ----
+
+export interface LeadFilters {
+  clientId?: string;
+  source?: LeadSource;
+  /** ISO timestamp — inclusive lower bound on createdAt */
+  from?: string;
+  /** ISO timestamp — inclusive upper bound on createdAt */
+  to?: string;
+  search?: string;
+}
+
+export interface LeadsResponse extends PaginatedResponse<LeadWithClient> {
+  countsBySource: Record<LeadSource, number>;
 }
 
 // ============================================================
@@ -236,6 +265,7 @@ export interface ClientFormValues {
   email: string;
   phone: string;
   whatsappPhone: string;
+  metaPageId: string;
   platform: Platform;
   accountId: string;
   accessToken: string;

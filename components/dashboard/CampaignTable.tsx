@@ -1,16 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { ExternalLink, TrendingUp, TrendingDown } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { ArrowRight, BarChart3 } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { StatusBadge } from "@/components/shared/StatusBadge";
 import {
   formatCurrency,
   formatNumber,
   formatPercent,
   calcBudgetUsage,
-  getCampaignStatusColor,
+  getPlatformColor,
   getPlatformLabel,
   cn,
 } from "@/lib/utils";
@@ -22,6 +22,12 @@ interface CampaignTableProps {
   description?: string;
   showClientColumn?: boolean;
   compact?: boolean;
+  /** Shows a "View all" link in the card header */
+  viewAllHref?: string;
+}
+
+function usageColor(usage: number) {
+  return usage >= 90 ? "red" : usage >= 80 ? "amber" : "primary";
 }
 
 export function CampaignTable({
@@ -30,67 +36,50 @@ export function CampaignTable({
   description,
   showClientColumn = true,
   compact = false,
+  viewAllHref,
 }: CampaignTableProps) {
-  if (campaigns.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
+  return (
+    <Card className="overflow-hidden">
+      <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+        <div className="space-y-1">
           <CardTitle>{title}</CardTitle>
           {description && <CardDescription>{description}</CardDescription>}
-        </CardHeader>
-        <CardContent>
-          <p className="text-center text-muted-foreground py-8 text-sm">
-            No campaigns found.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        {description && <CardDescription>{description}</CardDescription>}
+        </div>
+        {viewAllHref && (
+          <Link
+            href={viewAllHref}
+            className="inline-flex shrink-0 items-center gap-1 text-sm font-medium text-primary hover:underline"
+          >
+            View all <ArrowRight className="h-3.5 w-3.5" />
+          </Link>
+        )}
       </CardHeader>
-      <CardContent className="p-0">
-        <div className="overflow-x-auto">
+
+      {campaigns.length === 0 ? (
+        <CardContent>
+          <div className="flex flex-col items-center justify-center gap-2 rounded-lg border border-dashed py-10 text-muted-foreground">
+            <BarChart3 className="h-8 w-8 opacity-40" />
+            <p className="text-sm font-medium">No campaigns to show</p>
+          </div>
+        </CardContent>
+      ) : (
+        <div className="overflow-x-auto border-t">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/40">
-                <th className="text-left px-6 py-3 font-medium text-muted-foreground whitespace-nowrap">
-                  Campaign
-                </th>
-                {showClientColumn && (
-                  <th className="text-left px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">
-                    Client
-                  </th>
-                )}
-                <th className="text-left px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">
-                  Status
-                </th>
-                <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">
-                  Spend
-                </th>
+                <th className="th pl-5">Campaign</th>
+                {showClientColumn && <th className="th">Client</th>}
+                <th className="th">Status</th>
+                <th className="th text-right">Spend</th>
                 {!compact && (
                   <>
-                    <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">
-                      Clicks
-                    </th>
-                    <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">
-                      CTR
-                    </th>
-                    <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">
-                      Conv.
-                    </th>
-                    <th className="text-right px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">
-                      CPC
-                    </th>
+                    <th className="th text-right">Clicks</th>
+                    <th className="th text-right">CTR</th>
+                    <th className="th text-right">Conv.</th>
+                    <th className="th text-right">CPC</th>
                   </>
                 )}
-                <th className="px-4 py-3 font-medium text-muted-foreground whitespace-nowrap">
-                  Budget
-                </th>
+                <th className="th pr-5">Budget used</th>
               </tr>
             </thead>
             <tbody className="divide-y">
@@ -98,123 +87,96 @@ export function CampaignTable({
                 const budget =
                   campaign.totalBudget > 0 ? campaign.totalBudget : campaign.dailyBudget;
                 const usage = calcBudgetUsage(campaign.spend, budget);
-                const isLowBudget = usage >= 80;
+                const color = usageColor(usage);
 
                 return (
-                  <tr
-                    key={campaign.id}
-                    className="hover:bg-muted/30 transition-colors group"
-                  >
-                    {/* Campaign name */}
-                    <td className="px-6 py-3.5 max-w-[200px]">
-                      <div className="font-medium truncate" title={campaign.name}>
+                  <tr key={campaign.id} className="transition-colors hover:bg-muted/40">
+                    {/* Campaign name + platform */}
+                    <td className="max-w-[280px] py-3 pl-5 pr-4">
+                      <div className="truncate font-medium" title={campaign.name}>
                         {campaign.name}
                       </div>
-                      <div className="text-xs text-muted-foreground mt-0.5">
+                      <div className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: getPlatformColor(campaign.platform) }} />
                         {getPlatformLabel(campaign.platform)}
                       </div>
                     </td>
 
-                    {/* Client */}
                     {showClientColumn && (
-                      <td className="px-4 py-3.5">
+                      <td className="whitespace-nowrap px-4 py-3">
                         <Link
                           href={`/clients/${campaign.client.id}`}
-                          className="text-primary hover:underline text-xs font-medium flex items-center gap-1 group/link"
+                          className="text-sm font-medium text-foreground/80 hover:text-primary hover:underline"
                         >
                           {campaign.client.name}
-                          <ExternalLink className="h-3 w-3 opacity-0 group-hover/link:opacity-100 transition-opacity" />
                         </Link>
                       </td>
                     )}
 
-                    {/* Status */}
-                    <td className="px-4 py-3.5">
-                      <span
-                        className={cn(
-                          "inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium",
-                          getCampaignStatusColor(campaign.status)
-                        )}
-                      >
-                        {campaign.status}
-                      </span>
+                    <td className="px-4 py-3">
+                      <StatusBadge status={campaign.status} />
                     </td>
 
-                    {/* Spend */}
-                    <td className="px-4 py-3.5 text-right font-medium tabular-nums">
+                    <td className="whitespace-nowrap px-4 py-3 text-right font-medium tabular-nums">
                       {formatCurrency(campaign.spend)}
                     </td>
 
                     {!compact && (
                       <>
-                        {/* Clicks */}
-                        <td className="px-4 py-3.5 text-right text-muted-foreground tabular-nums">
+                        <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
                           {formatNumber(campaign.clicks, true)}
                         </td>
-
-                        {/* CTR */}
-                        <td className="px-4 py-3.5 text-right tabular-nums">
-                          <div className="flex items-center justify-end gap-1">
-                            {campaign.ctr > 2 ? (
-                              <TrendingUp className="h-3.5 w-3.5 text-green-500" />
-                            ) : campaign.ctr < 1 ? (
-                              <TrendingDown className="h-3.5 w-3.5 text-red-500" />
-                            ) : null}
-                            <span className={cn(
-                              "text-sm",
-                              campaign.ctr > 2 ? "text-green-600 dark:text-green-400" :
-                              campaign.ctr < 1 ? "text-red-600 dark:text-red-400" :
-                              "text-muted-foreground"
-                            )}>
-                              {formatPercent(campaign.ctr)}
-                            </span>
-                          </div>
+                        <td
+                          className={cn(
+                            "px-4 py-3 text-right tabular-nums",
+                            campaign.ctr > 2
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : campaign.ctr < 1
+                              ? "text-red-600 dark:text-red-400"
+                              : "text-muted-foreground"
+                          )}
+                          title={campaign.ctr > 2 ? "Strong CTR (above 2%)" : campaign.ctr < 1 ? "Weak CTR (below 1%)" : undefined}
+                        >
+                          {formatPercent(campaign.ctr)}
                         </td>
-
-                        {/* Conversions */}
-                        <td className="px-4 py-3.5 text-right font-medium tabular-nums">
+                        <td className="px-4 py-3 text-right font-medium tabular-nums">
                           {formatNumber(campaign.conversions)}
                         </td>
-
-                        {/* CPC */}
-                        <td className="px-4 py-3.5 text-right text-muted-foreground tabular-nums">
+                        <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-muted-foreground">
                           {formatCurrency(campaign.cpc)}
                         </td>
                       </>
                     )}
 
                     {/* Budget progress */}
-                    <td className="px-4 py-3.5 min-w-[140px]">
-                      <div className="space-y-1">
-                        <div className="flex justify-between text-xs">
-                          <span className="text-muted-foreground">
-                            {formatCurrency(campaign.spend, "INR", true)} / {formatCurrency(budget, "INR", true)}
-                          </span>
-                          <span
+                    <td className="min-w-[150px] py-3 pl-4 pr-5">
+                      {budget > 0 ? (
+                        <div className="space-y-1.5">
+                          <div className="flex justify-between gap-2 text-xs">
+                            <span className="text-muted-foreground tabular-nums">
+                              of {formatCurrency(budget, "INR", true)}
+                            </span>
+                            <span
+                              className={cn(
+                                "font-medium tabular-nums",
+                                color === "red" && "text-red-600 dark:text-red-400",
+                                color === "amber" && "text-amber-600 dark:text-amber-400"
+                              )}
+                            >
+                              {usage}%
+                            </span>
+                          </div>
+                          <Progress
+                            value={usage}
                             className={cn(
-                              "font-medium",
-                              usage >= 90
-                                ? "text-red-600 dark:text-red-400"
-                                : usage >= 80
-                                ? "text-yellow-600 dark:text-yellow-400"
-                                : "text-muted-foreground"
+                              "h-1.5",
+                              color === "red" ? "[&>div]:bg-red-500" : color === "amber" ? "[&>div]:bg-amber-500" : "[&>div]:bg-primary"
                             )}
-                          >
-                            {usage}%
-                          </span>
+                          />
                         </div>
-                        <Progress
-                          value={usage}
-                          className={cn(
-                            "h-1.5",
-                            usage >= 90
-                              ? "[&>div]:bg-red-500"
-                              : usage >= 80
-                              ? "[&>div]:bg-yellow-500"
-                              : "[&>div]:bg-primary"
-                          )}
-                        />
-                      </div>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">No budget set</span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -222,7 +184,7 @@ export function CampaignTable({
             </tbody>
           </table>
         </div>
-      </CardContent>
+      )}
     </Card>
   );
 }

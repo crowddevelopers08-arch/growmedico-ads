@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Wallet, RefreshCw } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { cn, formatCurrency } from "@/lib/utils";
+import { statIconStyles } from "./StatsCard";
 
 interface AvailableFundsCardProps {
   fallback?: number;
@@ -15,6 +16,8 @@ export function AvailableFundsCard({ fallback = 0, className }: AvailableFundsCa
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
+  const [totalDue, setTotalDue] = useState(0);
+  const [prepaidCount, setPrepaidCount] = useState<number | null>(null);
 
   const fetchBalance = useCallback(async () => {
     setLoading(true);
@@ -25,6 +28,8 @@ export function AvailableFundsCard({ fallback = 0, className }: AvailableFundsCa
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setBalance(data.total ?? 0);
+      setTotalDue(data.totalDue ?? 0);
+      setPrepaidCount((data.clients ?? []).filter((c: { isPrepaid?: boolean | null }) => c.isPrepaid).length);
       setFetchedAt(data.fetchedAt ?? null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to fetch");
@@ -45,43 +50,53 @@ export function AvailableFundsCard({ fallback = 0, className }: AvailableFundsCa
     : null;
 
   return (
-    <Card className={cn("relative overflow-hidden transition-all hover:shadow-md", className)}>
-      <CardContent className="p-6">
-        <div className="flex items-start justify-between">
-          <div className="space-y-1.5 flex-1 min-w-0">
-            <p className="text-sm font-medium text-muted-foreground truncate">Available Funds</p>
-            {loading ? (
-              <div className="h-8 w-28 rounded bg-muted animate-pulse mt-1" />
-            ) : (
-              <p className="text-2xl font-bold tracking-tight truncate">
-                {formatCurrency(displayValue, "INR", true)}
-              </p>
-            )}
-            <div className="flex items-center gap-1.5">
-              <span className={cn("text-xs", error ? "text-yellow-500" : "text-muted-foreground")}>
-                {loading
-                  ? "Fetching from Meta…"
-                  : error
-                  ? `Cached · ${error}`
-                  : `Live from Meta${timeLabel ? ` · ${timeLabel}` : ""}`}
-              </span>
-              {!loading && (
-                <button
-                  onClick={fetchBalance}
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                  title="Refresh balance"
-                >
-                  <RefreshCw className="h-3 w-3" />
-                </button>
-              )}
-            </div>
+    <Card className={cn("h-full p-5", className)}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <div className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", statIconStyles.success)}>
+            <Wallet className="h-4 w-4" />
           </div>
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg ml-4 bg-green-100 text-green-600 dark:bg-green-900/20 dark:text-green-400">
-            <Wallet className="h-5 w-5" />
-          </div>
+          <p className="truncate text-sm font-medium text-muted-foreground">Available Funds</p>
         </div>
-      </CardContent>
-      <div className="absolute inset-x-0 bottom-0 h-0.5 bg-gradient-to-r from-transparent via-primary/20 to-transparent" />
+        <button
+          onClick={fetchBalance}
+          disabled={loading}
+          className="rounded-md p-1 text-muted-foreground/60 transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+          title="Refresh balance"
+          aria-label="Refresh balance"
+        >
+          <RefreshCw className={cn("h-3.5 w-3.5", loading && "animate-spin")} />
+        </button>
+      </div>
+
+      {loading && balance === null ? (
+        <div className="mt-4 h-7 w-28 animate-pulse rounded bg-muted" />
+      ) : (
+        <p className="mt-4 truncate text-[28px] font-semibold leading-none tracking-tight tabular-nums">
+          {formatCurrency(displayValue, "INR", true)}
+        </p>
+      )}
+
+      {!loading && !error && prepaidCount !== null && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Across {prepaidCount} prepaid account{prepaidCount !== 1 ? "s" : ""}
+          {totalDue > 0 && <> · {formatCurrency(totalDue, "INR", true)} due on cards</>}
+        </p>
+      )}
+
+      <p className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground" title={error ?? undefined}>
+        <span
+          className={cn(
+            "h-1.5 w-1.5 rounded-full",
+            loading ? "bg-muted-foreground/40" : error ? "bg-amber-500" : "bg-emerald-500"
+          )}
+        />
+        {loading
+          ? "Fetching from Meta…"
+          : error
+          ? "Last synced value · live fetch failed"
+          : `Live from Meta${timeLabel ? ` · ${timeLabel}` : ""}`}
+      </p>
     </Card>
   );
 }

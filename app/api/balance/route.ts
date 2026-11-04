@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { fetchMetaAccountBalance } from "@/lib/metaAds";
+import { fetchMetaAccountBalance, resolveMetaAccessToken } from "@/lib/metaAds";
 
 export const dynamic = "force-dynamic";
 
@@ -22,25 +22,32 @@ export async function GET() {
 
     const results = await Promise.allSettled(
       metaClients.map(async (client) => {
-        if (!client.accessToken) {
-          return { id: client.id, name: client.name, balance: 0, error: "No access token" };
+        const token = resolveMetaAccessToken(client.accessToken);
+        if (!token) {
+          return { id: client.id, name: client.name, balance: 0, isPrepaid: null, amountDue: 0, error: "No access token" };
         }
-        const balance = await fetchMetaAccountBalance(client.accountId, client.accessToken);
-        await prisma.client.update({ where: { id: client.id }, data: { balance } });
-        return { id: client.id, name: client.name, balance };
+        const funding = await fetchMetaAccountBalance(client.accountId, token);
+        await prisma.client.update({
+          where: { id: client.id },
+          data: { ...funding, balanceUpdatedAt: new Date() },
+        });
+        return { id: client.id, name: client.name, ...funding };
       })
     );
 
     const clients = results.map((r, i) =>
       r.status === "fulfilled"
         ? r.value
-        : { id: metaClients[i].id, name: metaClients[i].name, balance: 0, error: String((r as PromiseRejectedResult).reason) }
+        : { id: metaClients[i].id, name: metaClients[i].name, balance: 0, isPrepaid: null, amountDue: 0, error: String((r as PromiseRejectedResult).reason) }
     );
 
+    // Only prepaid accounts hold funds; postpaid amounts due are reported separately
     const total = clients.reduce((sum, c) => sum + c.balance, 0);
+    const totalDue = clients.reduce((sum, c) => sum + c.amountDue, 0);
+    const failed = clients.filter((c) => "error" in c).length;
     const fetchedAt = new Date().toISOString();
 
-    const response = NextResponse.json({ total, clients, fetchedAt });
+    const response = NextResponse.json({ total, totalDue, clients, failed, fetchedAt });
     // Prevent browser/CDN from caching the balance response
     response.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
     return response;

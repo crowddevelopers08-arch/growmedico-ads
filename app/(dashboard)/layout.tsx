@@ -18,7 +18,7 @@ export default async function DashboardLayout({
     <SessionProvider session={session}>
       <div className="flex min-h-screen bg-background">
         <Sidebar />
-        <main className="flex-1 flex flex-col overflow-hidden">
+        <main className="flex min-w-0 flex-1 flex-col">
           {children}
         </main>
       </div>

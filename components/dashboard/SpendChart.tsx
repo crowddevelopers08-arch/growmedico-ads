@@ -8,10 +8,10 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from "recharts";
+import { LineChart as LineChartIcon } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { formatCurrency, formatDate } from "@/lib/utils";
+import { formatCurrency, formatDate, formatNumber } from "@/lib/utils";
 import type { ChartDataPoint } from "@/types";
 
 interface SpendChartProps {
@@ -20,6 +20,13 @@ interface SpendChartProps {
   description?: string;
   showConversions?: boolean;
 }
+
+const SPEND_COLOR = "#3b82f6";
+const CONVERSIONS_COLOR = "#10b981";
+
+// Grid lines and tick labels follow the theme tokens instead of recharts' fixed greys
+const chartThemeClasses =
+  "[&_.recharts-cartesian-grid_line]:stroke-border [&_.recharts-cartesian-axis-tick_text]:fill-muted-foreground";
 
 interface TooltipPayload {
   color: string;
@@ -39,22 +46,36 @@ const CustomTooltip = ({
   if (!active || !payload || !payload.length) return null;
 
   return (
-    <div className="rounded-lg border bg-background p-3 shadow-lg text-sm min-w-[160px]">
-      <p className="font-medium mb-2 text-foreground">{label}</p>
-      {payload.map((entry) => (
-        <div key={entry.name} className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-1.5">
-            <div className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
-            <span className="text-muted-foreground capitalize">{entry.name}</span>
+    <div className="min-w-[170px] rounded-lg border bg-popover p-3 text-sm shadow-lg">
+      <p className="mb-2 font-medium text-foreground">{label}</p>
+      <div className="space-y-1">
+        {payload.map((entry) => (
+          <div key={entry.name} className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-1.5">
+              <div className="h-2 w-2 rounded-full" style={{ backgroundColor: entry.color }} />
+              <span className="capitalize text-muted-foreground">{entry.name}</span>
+            </div>
+            <span className="font-medium tabular-nums text-foreground">
+              {entry.name === "spend" ? formatCurrency(entry.value) : entry.value.toLocaleString("en-IN")}
+            </span>
           </div>
-          <span className="font-medium text-foreground">
-            {entry.name === "spend" ? formatCurrency(entry.value) : entry.value.toLocaleString()}
-          </span>
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   );
 };
+
+function LegendItem({ color, label, value }: { color: string; label: string; value: string }) {
+  return (
+    <div>
+      <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+        {label}
+      </div>
+      <p className="mt-0.5 text-lg font-semibold tabular-nums">{value}</p>
+    </div>
+  );
+}
 
 export function SpendChart({
   data,
@@ -67,89 +88,102 @@ export function SpendChart({
     date: formatDate(d.date, "MMM d"),
   }));
 
-  if (data.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>{title}</CardTitle>
-          <CardDescription>{description}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center justify-center h-[300px] text-muted-foreground gap-2">
-            <svg className="w-10 h-10 opacity-30" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-            <p className="text-sm font-medium">No spend data yet</p>
-            <p className="text-xs">Sync campaigns to see daily trends</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const periodSpend = data.reduce((s, d) => s + d.spend, 0);
+  const periodConversions = data.reduce((s, d) => s + d.conversions, 0);
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{description}</CardDescription>
+    <Card className="h-full">
+      <CardHeader className="flex flex-col gap-4 space-y-0 sm:flex-row sm:items-start sm:justify-between">
+        <div className="space-y-1">
+          <CardTitle>{title}</CardTitle>
+          <CardDescription>{description}</CardDescription>
+        </div>
+        {data.length > 0 && (
+          <div className="flex gap-6">
+            <LegendItem color={SPEND_COLOR} label="Spend" value={formatCurrency(periodSpend, "INR", true)} />
+            {showConversions && (
+              <LegendItem color={CONVERSIONS_COLOR} label="Conversions" value={formatNumber(periodConversions)} />
+            )}
+          </div>
+        )}
       </CardHeader>
       <CardContent>
-        <ResponsiveContainer width="100%" height={300}>
-          <AreaChart data={formattedData} margin={{ top: 4, right: 4, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id="colorSpend" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(221, 83%, 53%)" stopOpacity={0.15} />
-                <stop offset="95%" stopColor="hsl(221, 83%, 53%)" stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id="colorConversions" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#10b981" stopOpacity={0.15} />
-                <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-            <XAxis
-              dataKey="date"
-              tick={{ fontSize: 11 }}
-              tickLine={false}
-              axisLine={false}
-              className="text-muted-foreground"
-            />
-            <YAxis
-              tick={{ fontSize: 11 }}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(v) => `$${v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}`}
-              className="text-muted-foreground"
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Legend
-              wrapperStyle={{ fontSize: 12, paddingTop: 12 }}
-              formatter={(value) =>
-                value.charAt(0).toUpperCase() + value.slice(1)
-              }
-            />
-            <Area
-              type="monotone"
-              dataKey="spend"
-              stroke="hsl(221, 83%, 53%)"
-              strokeWidth={2}
-              fill="url(#colorSpend)"
-              dot={false}
-              activeDot={{ r: 4 }}
-            />
-            {showConversions && (
-              <Area
-                type="monotone"
-                dataKey="conversions"
-                stroke="#10b981"
-                strokeWidth={2}
-                fill="url(#colorConversions)"
-                dot={false}
-                activeDot={{ r: 4 }}
-              />
-            )}
-          </AreaChart>
-        </ResponsiveContainer>
+        {data.length === 0 ? (
+          <div className="flex h-[280px] flex-col items-center justify-center gap-2 rounded-lg border border-dashed text-muted-foreground">
+            <LineChartIcon className="h-8 w-8 opacity-40" />
+            <p className="text-sm font-medium">No spend data yet</p>
+            <p className="text-xs">Run a sync to see daily trends</p>
+          </div>
+        ) : (
+          <div className={chartThemeClasses}>
+            <ResponsiveContainer width="100%" height={280}>
+              <AreaChart data={formattedData} margin={{ top: 8, right: 0, left: -8, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorSpend" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={SPEND_COLOR} stopOpacity={0.25} />
+                    <stop offset="100%" stopColor={SPEND_COLOR} stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="colorConversions" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor={CONVERSIONS_COLOR} stopOpacity={0.2} />
+                    <stop offset="100%" stopColor={CONVERSIONS_COLOR} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={false}
+                  minTickGap={24}
+                  tickMargin={8}
+                />
+                {/* Spend (₹) on the left; conversions get their own scale so they don't flatten */}
+                <YAxis
+                  yAxisId="spend"
+                  tick={{ fontSize: 11 }}
+                  tickLine={false}
+                  axisLine={false}
+                  width={56}
+                  tickFormatter={(v: number) => formatCurrency(v, "INR", true)}
+                />
+                {showConversions && (
+                  <YAxis
+                    yAxisId="conversions"
+                    orientation="right"
+                    tick={{ fontSize: 11 }}
+                    tickLine={false}
+                    axisLine={false}
+                    width={36}
+                    allowDecimals={false}
+                  />
+                )}
+                <Tooltip content={<CustomTooltip />} cursor={{ stroke: "currentColor", strokeOpacity: 0.15 }} />
+                <Area
+                  yAxisId="spend"
+                  type="monotone"
+                  dataKey="spend"
+                  stroke={SPEND_COLOR}
+                  strokeWidth={2}
+                  fill="url(#colorSpend)"
+                  dot={false}
+                  activeDot={{ r: 4, strokeWidth: 0 }}
+                />
+                {showConversions && (
+                  <Area
+                    yAxisId="conversions"
+                    type="monotone"
+                    dataKey="conversions"
+                    stroke={CONVERSIONS_COLOR}
+                    strokeWidth={2}
+                    fill="url(#colorConversions)"
+                    dot={false}
+                    activeDot={{ r: 4, strokeWidth: 0 }}
+                  />
+                )}
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

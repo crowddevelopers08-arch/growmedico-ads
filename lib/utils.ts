@@ -78,27 +78,51 @@ export function getPlatformLabel(platform: string): string {
 export function getPlatformColor(platform: string): string {
   const colors: Record<string, string> = {
     GOOGLE: "#4285F4",
-    META: "#1877F2",
+    // Violet rather than Meta's brand blue so the two platforms stay distinguishable in charts
+    META: "#8b5cf6",
   };
   return colors[platform] ?? "#6B7280";
+}
+
+// ── Lead source labels ──────────────────────────────────────
+export function getLeadSourceLabel(source: string): string {
+  const labels: Record<string, string> = {
+    WHATSAPP: "WhatsApp",
+    META_FORM: "Meta Lead Form",
+    WEBSITE: "Website",
+  };
+  return labels[source] ?? source;
+}
+
+export function getLeadSourceColor(source: string): string {
+  const colors: Record<string, string> = {
+    WHATSAPP: "#25D366",
+    META_FORM: "#1877F2",
+    WEBSITE: "#F97316",
+  };
+  return colors[source] ?? "#6B7280";
 }
 
 // ── Status helpers ──────────────────────────────────────────
 export function getCampaignStatusColor(status: string): string {
   const colors: Record<string, string> = {
-    ACTIVE: "text-green-600 bg-green-50 dark:bg-green-900/20",
-    PAUSED: "text-yellow-600 bg-yellow-50 dark:bg-yellow-900/20",
-    ENDED: "text-gray-600 bg-gray-50 dark:bg-gray-900/20",
-    DELETED: "text-red-600 bg-red-50 dark:bg-red-900/20",
+    ACTIVE: "text-emerald-700 bg-emerald-50 ring-emerald-600/20 dark:text-emerald-400 dark:bg-emerald-500/10 dark:ring-emerald-400/20",
+    PAUSED: "text-amber-700 bg-amber-50 ring-amber-600/20 dark:text-amber-400 dark:bg-amber-500/10 dark:ring-amber-400/20",
+    ENDED: "text-slate-600 bg-slate-100 ring-slate-500/20 dark:text-slate-400 dark:bg-slate-500/10 dark:ring-slate-400/20",
+    DELETED: "text-red-700 bg-red-50 ring-red-600/20 dark:text-red-400 dark:bg-red-500/10 dark:ring-red-400/20",
   };
-  return colors[status] ?? "text-gray-600 bg-gray-50";
+  return colors[status] ?? colors.ENDED;
+}
+
+export function getCampaignStatusLabel(status: string): string {
+  return status.charAt(0) + status.slice(1).toLowerCase();
 }
 
 export function getSeverityColor(severity: string): string {
   const colors: Record<string, string> = {
-    INFO: "text-blue-600 bg-blue-50 border-blue-200 dark:bg-blue-900/20",
-    WARNING: "text-yellow-600 bg-yellow-50 border-yellow-200 dark:bg-yellow-900/20",
-    CRITICAL: "text-red-600 bg-red-50 border-red-200 dark:bg-red-900/20",
+    INFO: "text-blue-600 bg-blue-50 border-blue-200 dark:text-blue-400 dark:bg-blue-500/10 dark:border-blue-500/20",
+    WARNING: "text-amber-600 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-500/10 dark:border-amber-500/20",
+    CRITICAL: "text-red-600 bg-red-50 border-red-200 dark:text-red-400 dark:bg-red-500/10 dark:border-red-500/20",
   };
   return colors[severity] ?? "text-gray-600 bg-gray-50";
 }

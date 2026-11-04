@@ -1,220 +1,180 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { Bell, Check, CheckCheck } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { PageLoader } from "@/components/shared/LoadingSpinner";
 import { EmptyState } from "@/components/shared/EmptyState";
+import { ErrorMessage } from "@/components/shared/ErrorMessage";
+import { PageHeader } from "@/components/shared/PageHeader";
+import { Pagination } from "@/components/shared/Pagination";
+import { SegmentedControl } from "@/components/shared/SegmentedControl";
+import { severityConfig } from "@/components/dashboard/RecentAlerts";
 import { useAlerts } from "@/hooks/useAlerts";
-import {
-  Bell, AlertTriangle, AlertCircle, Info, CheckCircle2, Link2,
-} from "lucide-react";
-import { formatRelativeTime, getSeverityColor, cn } from "@/lib/utils";
-import Link from "next/link";
+import { formatRelativeTime, cn } from "@/lib/utils";
 
-const severityConfig = {
-  CRITICAL: { icon: AlertCircle, label: "Critical", badgeVariant: "critical" as const },
-  WARNING: { icon: AlertTriangle, label: "Warning", badgeVariant: "warning" as const },
-  INFO: { icon: Info, label: "Info", badgeVariant: "info" as const },
-};
+const PAGE_SIZE = 20;
+
+type SeverityFilter = "ALL" | "CRITICAL" | "WARNING" | "INFO";
 
 export default function AlertsPage() {
-  const [severity, setSeverity] = useState<"ALL" | "CRITICAL" | "WARNING" | "INFO">("ALL");
-  const [unreadOnly, setUnreadOnly] = useState(false);
+  const [severity, setSeverity] = useState<SeverityFilter>("ALL");
+  const [readFilter, setReadFilter] = useState<"ALL" | "UNREAD">("ALL");
   const [page, setPage] = useState(1);
+  const unreadOnly = readFilter === "UNREAD";
 
   const { alerts, total, totalPages, unreadCount, isLoading, error, markAsRead, markAllAsRead } =
     useAlerts({
       severity: severity !== "ALL" ? severity : undefined,
       unreadOnly,
       page,
-      pageSize: 20,
+      pageSize: PAGE_SIZE,
     });
 
-  const handleMarkAllRead = async () => {
-    await markAllAsRead();
-  };
-
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col">
       <Header title="Alerts" />
 
-      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 animate-fade-in">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-semibold">Alert Center</h2>
-              {unreadCount > 0 && (
-                <Badge variant="critical" className="text-xs">
-                  {unreadCount} unread
-                </Badge>
-              )}
-            </div>
-            <p className="text-sm text-muted-foreground">
-              {total} alert{total !== 1 ? "s" : ""} total
-            </p>
-          </div>
-
-          {unreadCount > 0 && (
-            <Button variant="outline" size="sm" onClick={handleMarkAllRead} className="gap-2">
-              <CheckCircle2 className="h-4 w-4" />
-              Mark All as Read
-            </Button>
-          )}
-        </div>
+      <div className="mx-auto w-full max-w-5xl space-y-6 p-4 animate-fade-in md:p-8">
+        <PageHeader
+          title="Alerts"
+          description={
+            unreadCount > 0
+              ? `${unreadCount} unread · budget, spend and account issues across clients`
+              : "Budget, spend and account issues across clients"
+          }
+          actions={
+            unreadCount > 0 && (
+              <Button variant="outline" onClick={() => markAllAsRead()}>
+                <CheckCheck />
+                Mark all as read
+              </Button>
+            )
+          }
+        />
 
         {/* Filters */}
-        <div className="flex flex-wrap gap-3">
-          <Select value={severity} onValueChange={(v) => { setSeverity(v as typeof severity); setPage(1); }}>
-            <SelectTrigger className="w-[150px]">
-              <SelectValue placeholder="Severity" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">All Severities</SelectItem>
-              <SelectItem value="CRITICAL">Critical</SelectItem>
-              <SelectItem value="WARNING">Warning</SelectItem>
-              <SelectItem value="INFO">Info</SelectItem>
-            </SelectContent>
-          </Select>
-
-          <Button
-            variant={unreadOnly ? "default" : "outline"}
-            size="sm"
-            onClick={() => { setUnreadOnly(!unreadOnly); setPage(1); }}
-            className="gap-2"
-          >
-            <Bell className="h-4 w-4" />
-            {unreadOnly ? "Showing Unread" : "Show Unread Only"}
-          </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <SegmentedControl
+            ariaLabel="Read status"
+            value={readFilter}
+            onChange={(v) => { setReadFilter(v); setPage(1); }}
+            options={[
+              { value: "ALL", label: "All" },
+              {
+                value: "UNREAD",
+                label: (
+                  <>
+                    Unread
+                    {unreadCount > 0 && (
+                      <span className="rounded-full bg-red-500 px-1.5 text-[10px] font-semibold leading-4 text-white tabular-nums">
+                        {unreadCount}
+                      </span>
+                    )}
+                  </>
+                ),
+              },
+            ]}
+          />
+          <SegmentedControl
+            ariaLabel="Severity"
+            className="max-w-full overflow-x-auto"
+            value={severity}
+            onChange={(v) => { setSeverity(v); setPage(1); }}
+            options={[
+              { value: "ALL", label: "All severities" },
+              { value: "CRITICAL", label: "Critical" },
+              { value: "WARNING", label: "Warning" },
+              { value: "INFO", label: "Info" },
+            ]}
+          />
         </div>
 
         {/* Content */}
         {isLoading ? (
           <PageLoader text="Loading alerts..." />
         ) : error ? (
-          <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-900/10 p-4 text-sm text-red-600">
-            {error}
-          </div>
+          <ErrorMessage message={error} />
         ) : alerts.length === 0 ? (
           <EmptyState
             icon={Bell}
-            title={unreadOnly ? "No unread alerts" : "No alerts yet"}
+            title={unreadOnly ? "You're all caught up" : "No alerts yet"}
             description={
               unreadOnly
-                ? "All alerts have been read. Great job staying on top of things!"
+                ? "There are no unread alerts."
                 : "Alerts will appear here when budget thresholds are breached or issues are detected."
             }
           />
         ) : (
-          <>
-            <div className="space-y-2">
+          <div className="space-y-4">
+            <Card className="divide-y overflow-hidden">
               {alerts.map((alert) => {
                 const config = severityConfig[alert.severity] ?? severityConfig.INFO;
                 const SeverityIcon = config.icon;
 
                 return (
-                  <Card
+                  <div
                     key={alert.id}
                     className={cn(
-                      "transition-all",
-                      !alert.isRead && "border-l-4",
-                      alert.severity === "CRITICAL" && !alert.isRead && "border-l-red-500",
-                      alert.severity === "WARNING" && !alert.isRead && "border-l-yellow-500",
-                      alert.severity === "INFO" && !alert.isRead && "border-l-blue-500"
+                      "flex gap-4 p-4 transition-colors sm:px-5",
+                      !alert.isRead ? "bg-primary/[0.03]" : "opacity-75"
                     )}
                   >
-                    <CardContent className="p-4">
-                      <div className="flex gap-3">
-                        <div className={cn(
-                          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
-                          alert.severity === "CRITICAL" && "bg-red-100 dark:bg-red-900/20",
-                          alert.severity === "WARNING" && "bg-yellow-100 dark:bg-yellow-900/20",
-                          alert.severity === "INFO" && "bg-blue-100 dark:bg-blue-900/20",
-                        )}>
-                          <SeverityIcon className={cn(
-                            "h-4 w-4",
-                            alert.severity === "CRITICAL" && "text-red-600",
-                            alert.severity === "WARNING" && "text-yellow-600",
-                            alert.severity === "INFO" && "text-blue-600",
-                          )} />
-                        </div>
+                    <div className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", config.iconClass)}>
+                      <SeverityIcon className="h-4 w-4" />
+                    </div>
 
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-2 flex-wrap">
-                            <div>
-                              <p className={cn("text-sm font-medium", !alert.isRead && "text-foreground", alert.isRead && "text-muted-foreground")}>
-                                {alert.message}
-                              </p>
-                              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                <Link
-                                  href={`/clients/${alert.client.id}`}
-                                  className="text-xs text-primary hover:underline flex items-center gap-1"
-                                >
-                                  {alert.client.name}
-                                  <Link2 className="h-3 w-3" />
-                                </Link>
-                                <span className="text-xs text-muted-foreground">•</span>
-                                <span className="text-xs text-muted-foreground">
-                                  {formatRelativeTime(alert.createdAt)}
-                                </span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-2 shrink-0">
-                              <Badge variant={config.badgeVariant} className="text-xs">
-                                {config.label}
-                              </Badge>
-                              {!alert.isRead && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 text-xs"
-                                  onClick={() => markAsRead([alert.id])}
-                                >
-                                  Mark read
-                                </Button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start gap-2">
+                        {!alert.isRead && (
+                          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" aria-label="Unread" />
+                        )}
+                        <p className={cn("break-words text-sm", !alert.isRead ? "font-medium" : "text-muted-foreground")}>
+                          {alert.message}
+                        </p>
                       </div>
-                    </CardContent>
-                  </Card>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                        <span className={cn("font-medium", config.textClass)}>
+                          {config.label}
+                        </span>
+                        <span aria-hidden>·</span>
+                        <Link href={`/clients/${alert.client.id}`} className="font-medium hover:text-foreground hover:underline">
+                          {alert.client.name}
+                        </Link>
+                        <span aria-hidden>·</span>
+                        <span>{formatRelativeTime(alert.createdAt)}</span>
+                      </div>
+                    </div>
+
+                    {!alert.isRead && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="shrink-0 self-center text-muted-foreground"
+                        onClick={() => markAsRead([alert.id])}
+                        title="Mark as read"
+                      >
+                        <Check />
+                        <span className="hidden sm:inline">Mark read</span>
+                      </Button>
+                    )}
+                  </div>
                 );
               })}
-            </div>
+            </Card>
 
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-center gap-2 pt-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                >
-                  Previous
-                </Button>
-                <span className="text-sm text-muted-foreground">
-                  Page {page} of {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                >
-                  Next
-                </Button>
-              </div>
-            )}
-          </>
+            <Pagination
+              page={page}
+              totalPages={totalPages}
+              total={total}
+              pageSize={PAGE_SIZE}
+              onPageChange={setPage}
+              itemLabel="alerts"
+            />
+          </div>
         )}
       </div>
     </div>

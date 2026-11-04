@@ -11,6 +11,7 @@ const createClientSchema = z.object({
   email: z.string().email().optional().or(z.literal("")),
   phone: z.string().max(20).optional(),
   whatsappPhone: z.string().max(20).optional(),
+  metaPageId: z.string().max(50).optional(),
   platform: z.enum(["GOOGLE", "META"]),
   accountId: z.string().min(1, "Account ID is required").max(50),
   accessToken: z.string().optional(),
@@ -110,6 +111,7 @@ export async function POST(request: Request) {
         email: validated.data.email || null,
         phone: validated.data.phone,
         whatsappPhone: validated.data.whatsappPhone,
+        metaPageId: validated.data.metaPageId || null,
         platform: validated.data.platform,
         accountId: validated.data.accountId,
         accessToken: validated.data.accessToken,
@@ -120,6 +122,12 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ data: client }, { status: 201 });
   } catch (error) {
+    if ((error as { code?: string }).code === "P2002") {
+      return NextResponse.json(
+        { error: "This Meta Page ID is already linked to another client." },
+        { status: 409 }
+      );
+    }
     console.error("[POST /api/clients]", error);
     return NextResponse.json({ error: "Failed to create client" }, { status: 500 });
   }

@@ -31,6 +31,7 @@ const DEFAULT_VALUES: ClientFormValues = {
   email: "",
   phone: "",
   whatsappPhone: "",
+  metaPageId: "",
   platform: "GOOGLE",
   accountId: "",
   accessToken: "",
@@ -51,6 +52,7 @@ export function ClientForm({ client, mode }: ClientFormProps) {
     email: client?.email ?? DEFAULT_VALUES.email,
     phone: client?.phone ?? DEFAULT_VALUES.phone,
     whatsappPhone: (client as (Client & { whatsappPhone?: string | null }) | undefined)?.whatsappPhone ?? DEFAULT_VALUES.whatsappPhone,
+    metaPageId: client?.metaPageId ?? DEFAULT_VALUES.metaPageId,
     platform: (client?.platform as "GOOGLE" | "META") ?? DEFAULT_VALUES.platform,
     accountId: client?.accountId ?? DEFAULT_VALUES.accountId,
     accessToken: "",
@@ -228,6 +230,20 @@ export function ClientForm({ client, mode }: ClientFormProps) {
             </div>
 
             <div className="space-y-2">
+              <Label htmlFor="metaPageId">Facebook Page ID</Label>
+              <Input
+                id="metaPageId"
+                value={values.metaPageId}
+                onChange={set("metaPageId")}
+                placeholder="123456789012345"
+                disabled={loading}
+              />
+              <p className="text-xs text-muted-foreground">
+                Meta Lead Form submissions from this page are saved as this client&apos;s leads.
+              </p>
+            </div>
+
+            <div className="space-y-2">
               <Label htmlFor="notes">Notes</Label>
               <textarea
                 id="notes"
@@ -358,7 +374,7 @@ export function ClientForm({ client, mode }: ClientFormProps) {
                 <p className="text-xs text-blue-700 dark:text-blue-400 mt-1">
                   Google Ads syncs via your MCC (Manager) account. No per-client token needed — just set{" "}
                   <code className="font-mono bg-blue-100 dark:bg-blue-900 px-1 rounded">GOOGLE_ADS_REFRESH_TOKEN</code>{" "}
-                  in <code className="font-mono bg-blue-100 dark:bg-blue-900 px-1 rounded">.env.local</code>.
+                  in <code className="font-mono bg-blue-100 dark:bg-blue-900 px-1 rounded">.env</code>.
                 </p>
               </div>
             ) : (

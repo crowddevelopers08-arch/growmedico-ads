@@ -1,30 +1,34 @@
-import { Suspense } from "react";
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import {
-  DollarSign,
+  IndianRupee,
   Users,
-  TrendingUp,
+  Target,
   Activity,
   AlertTriangle,
   MousePointerClick,
+  Bell,
+  ArrowRight,
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
+import { PageHeader } from "@/components/shared/PageHeader";
 import { StatsCard } from "@/components/dashboard/StatsCard";
 import { AvailableFundsCard } from "@/components/dashboard/AvailableFundsCard";
+import { AccountBalances } from "@/components/dashboard/AccountBalances";
 import { CampaignTable } from "@/components/dashboard/CampaignTable";
 import { SpendChart } from "@/components/dashboard/SpendChart";
 import { RecentAlerts } from "@/components/dashboard/RecentAlerts";
 import { PlatformPieChart } from "@/components/dashboard/PlatformPieChart";
-import { StatCardSkeleton } from "@/components/shared/LoadingSpinner";
-import { formatCurrency, formatNumber, safeJsonParse } from "@/lib/utils";
+import { Card } from "@/components/ui/card";
+import { cn, formatCurrency, formatNumber, formatPercent, safeJsonParse } from "@/lib/utils";
 import type { CampaignWithClient, AlertWithClient, ChartDataPoint, DailyStatEntry } from "@/types";
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Dashboard" };
+export const metadata: Metadata = { title: "Overview" };
 export const dynamic = "force-dynamic";
 
 async function getDashboardData() {
-  const [campaigns, clients, alerts, topCampaigns] = await Promise.all([
+  const [campaigns, clients, alerts, unreadAlerts, topCampaigns] = await Promise.all([
     prisma.campaign.findMany({
       select: {
         spend: true, clicks: true, impressions: true,
@@ -32,30 +36,37 @@ async function getDashboardData() {
         totalBudget: true, platform: true, dailyStats: true,
       },
     }),
-    prisma.client.findMany({ where: { isActive: true }, select: { balance: true } }),
+    prisma.client.findMany({
+      where: { isActive: true },
+      select: {
+        id: true, name: true, platform: true, balance: true, isPrepaid: true,
+        amountDue: true, fundingLabel: true, balanceUpdatedAt: true,
+      },
+    }),
     prisma.alert.findMany({
       where: { isRead: false },
       include: { client: { select: { id: true, name: true, platform: true } } },
       orderBy: [{ severity: "desc" }, { createdAt: "desc" }],
       take: 5,
     }),
+    prisma.alert.count({ where: { isRead: false } }),
     prisma.campaign.findMany({
       where: { status: "ACTIVE" },
       include: { client: { select: { id: true, name: true, platform: true } } },
       orderBy: { spend: "desc" },
-      take: 10,
+      take: 8,
     }),
   ]);
 
   const totalSpend = campaigns.reduce((s, c) => s + c.spend, 0);
   const totalConversions = campaigns.reduce((s, c) => s + c.conversions, 0);
   const totalClicks = campaigns.reduce((s, c) => s + c.clicks, 0);
+  const totalImpressions = campaigns.reduce((s, c) => s + c.impressions, 0);
   const activeCampaigns = campaigns.filter((c) => c.status === "ACTIVE").length;
   const totalClients = clients.length;
-  const unreadAlerts = alerts.length;
   const lowBudgetCampaigns = campaigns.filter((c) => {
     const budget = c.totalBudget > 0 ? c.totalBudget : c.dailyBudget;
-    return budget > 0 && (c.spend / budget) * 100 >= 80;
+    return c.status === "ACTIVE" && budget > 0 && (c.spend / budget) * 100 >= 80;
   }).length;
   // Sum of account prepaid balances fetched from Meta/Google APIs during sync
   const availableFunds = clients.reduce((sum, c) => sum + c.balance, 0);
@@ -88,105 +99,168 @@ async function getDashboardData() {
     .slice(-30);
 
   return {
-    stats: { totalSpend, totalConversions, totalClicks, activeCampaigns, totalClients, unreadAlerts, lowBudgetCampaigns, availableFunds },
+    stats: {
+      totalSpend, totalConversions, totalClicks, totalImpressions, activeCampaigns,
+      totalCampaigns: campaigns.length, totalClients, unreadAlerts, lowBudgetCampaigns, availableFunds,
+      costPerConversion: totalConversions > 0 ? totalSpend / totalConversions : 0,
+      ctr: totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0,
+    },
     spendByPlatform: Object.entries(spendByPlatform).map(([platform, spend]) => ({ platform, spend })),
+    clientBalances: clients,
     recentAlerts: alerts as AlertWithClient[],
     topCampaigns: topCampaigns as CampaignWithClient[],
     chartData,
   };
 }
 
+/** Compact row of secondary numbers that link to their sections. */
+function QuickStat({
+  href, icon: Icon, label, value, hint, tone = "default",
+}: {
+  href: string;
+  icon: typeof Activity;
+  label: string;
+  value: string;
+  hint: string;
+  tone?: "default" | "alert";
+}) {
+  return (
+    <Link href={href} className="group flex items-center gap-3 p-4 transition-colors hover:bg-muted/40 sm:p-5">
+      <Icon className={cn("h-5 w-5 shrink-0", tone === "alert" ? "text-red-500" : "text-muted-foreground")} />
+      <div className="min-w-0 flex-1">
+        <p className="text-xs text-muted-foreground">{label}</p>
+        <p className="mt-0.5 flex items-baseline gap-1.5">
+          <span className="text-lg font-semibold tabular-nums">{value}</span>
+          <span className="truncate text-xs text-muted-foreground">{hint}</span>
+        </p>
+      </div>
+      <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground/40 transition-all group-hover:translate-x-0.5 group-hover:text-primary" />
+    </Link>
+  );
+}
+
 export default async function DashboardPage() {
-  const data = await getDashboardData();
-  const { stats, spendByPlatform, recentAlerts, topCampaigns, chartData } = data;
+  const { stats, spendByPlatform, clientBalances, recentAlerts, topCampaigns, chartData } = await getDashboardData();
 
   return (
-    <div className="flex flex-col h-full">
-      <Header title="Dashboard" />
+    <div className="flex flex-col">
+      <Header title="Overview" />
 
-      <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 animate-fade-in">
-        {/* Stats Grid */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="mx-auto w-full max-w-[1400px] space-y-6 p-4 animate-fade-in md:p-8">
+        <PageHeader
+          title="Overview"
+          description="Performance across all clients and ad platforms"
+        />
+
+        {/* Budget warning banner — only when something needs action */}
+        {stats.lowBudgetCampaigns > 0 && (
+          <Link
+            href="/campaigns"
+            className="flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 transition-colors hover:bg-amber-100 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300 dark:hover:bg-amber-500/15"
+          >
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span className="flex-1">
+              <strong className="font-semibold">{stats.lowBudgetCampaigns} active campaign{stats.lowBudgetCampaigns !== 1 ? "s" : ""}</strong>{" "}
+              {stats.lowBudgetCampaigns !== 1 ? "have" : "has"} used over 80% of budget.
+            </span>
+            <span className="hidden items-center gap-1 font-medium sm:inline-flex">
+              Review <ArrowRight className="h-3.5 w-3.5" />
+            </span>
+          </Link>
+        )}
+
+        {/* Primary KPIs */}
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
           <StatsCard
             title="Total Spend"
             value={formatCurrency(stats.totalSpend, "INR", true)}
-            subtitle="all platforms"
-            icon={DollarSign}
-            variant="default"
-            className="xl:col-span-2"
+            subtitle="Lifetime, all platforms"
+            icon={IndianRupee}
           />
+          <AvailableFundsCard fallback={stats.availableFunds} />
           <StatsCard
-            title="Total Conversions"
+            title="Conversions"
             value={formatNumber(stats.totalConversions)}
-            subtitle="all campaigns"
-            icon={TrendingUp}
+            subtitle={
+              stats.costPerConversion > 0
+                ? <>{formatCurrency(stats.costPerConversion)} <span className="opacity-70">per conversion</span></>
+                : "No conversions yet"
+            }
+            icon={Target}
             variant="success"
           />
           <StatsCard
-            title="Total Clicks"
+            title="Clicks"
             value={formatNumber(stats.totalClicks, true)}
-            subtitle="all campaigns"
+            subtitle={<>{formatPercent(stats.ctr)} <span className="opacity-70">CTR · {formatNumber(stats.totalImpressions, true)} impressions</span></>}
             icon={MousePointerClick}
             variant="info"
           />
-          <StatsCard
-            title="Active Campaigns"
-            value={String(stats.activeCampaigns)}
-            subtitle="currently running"
-            icon={Activity}
-            variant="default"
-          />
-          <StatsCard
-            title="Active Clients"
-            value={String(stats.totalClients)}
-            subtitle="accounts connected"
-            icon={Users}
-            variant="info"
-          />
-          <AvailableFundsCard fallback={stats.availableFunds} />
-          {stats.lowBudgetCampaigns > 0 && (
-            <StatsCard
-              title="Budget Alerts"
-              value={String(stats.lowBudgetCampaigns)}
-              subtitle="campaigns at >80% budget"
-              icon={AlertTriangle}
-              variant="warning"
-            />
-          )}
         </div>
 
-        {/* Charts Row */}
+        {/* Secondary counts */}
+        <Card className="grid divide-y overflow-hidden sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          <QuickStat
+            href="/campaigns"
+            icon={Activity}
+            label="Active campaigns"
+            value={String(stats.activeCampaigns)}
+            hint={`of ${stats.totalCampaigns} total`}
+          />
+          <QuickStat
+            href="/clients"
+            icon={Users}
+            label="Active clients"
+            value={String(stats.totalClients)}
+            hint="accounts connected"
+          />
+          <QuickStat
+            href="/alerts"
+            icon={Bell}
+            label="Unread alerts"
+            value={String(stats.unreadAlerts)}
+            hint={stats.unreadAlerts > 0 ? "need attention" : "all caught up"}
+            tone={stats.unreadAlerts > 0 ? "alert" : "default"}
+          />
+        </Card>
+
+        <AccountBalances clients={clientBalances} />
+
+        {/* Charts */}
         <div className="grid gap-4 lg:grid-cols-3">
           <div className="lg:col-span-2">
             <SpendChart
               data={chartData}
-              title="Spend & Conversions (Last 30 Days)"
-              description="Daily aggregate across all clients"
+              title="Spend & Conversions"
+              description="Daily totals for the last 30 days"
             />
           </div>
           <PlatformPieChart
             data={spendByPlatform}
             title="Spend by Platform"
-            description="Breakdown by ad network"
+            description="Share of total spend"
           />
         </div>
 
-        {/* Table + Alerts Row */}
-        <div className="grid gap-4 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <Suspense fallback={<StatCardSkeleton />}>
-              <CampaignTable
-                campaigns={topCampaigns}
-                title="Top Active Campaigns"
-                description="Ranked by spend"
-                compact={false}
-              />
-            </Suspense>
+        {/* Campaigns + alerts */}
+        <div className="grid gap-4 xl:grid-cols-3">
+          <div className="min-w-0 xl:col-span-2">
+            <CampaignTable
+              campaigns={topCampaigns}
+              title="Top Active Campaigns"
+              description="Highest spend first"
+              compact
+              viewAllHref="/campaigns"
+            />
           </div>
           <RecentAlerts
             alerts={recentAlerts}
             title="Unread Alerts"
-            description={`${stats.unreadAlerts} requiring attention`}
+            description={
+              stats.unreadAlerts > 0
+                ? `${stats.unreadAlerts} need${stats.unreadAlerts === 1 ? "s" : ""} attention`
+                : "Nothing needs attention"
+            }
           />
         </div>
       </div>

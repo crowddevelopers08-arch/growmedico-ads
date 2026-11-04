@@ -23,6 +23,14 @@ export async function runAlertEngine(
   const threshold = getBudgetAlertThreshold();
   const results: AlertEngineResult = { alertsCreated: 0, alerts: [] };
 
+  // Load unread alerts once for dedup instead of querying per campaign
+  const unread = await prisma.alert.findMany({
+    where: { clientId: client.id, isRead: false },
+    select: { campaignId: true, type: true },
+  });
+  const openAlerts = new Set(unread.map((a) => alertKey(a.campaignId, a.type)));
+  const createAlertIfNew = (input: AlertInput, c: Client) => createAlertIfNewInternal(input, c, openAlerts);
+
   for (const campaign of campaigns) {
     const budget = campaign.totalBudget > 0 ? campaign.totalBudget : campaign.dailyBudget;
     const usagePct = calcBudgetUsage(campaign.spend, budget);
@@ -103,25 +111,20 @@ interface AlertInput {
   metadata?: Record<string, unknown>;
 }
 
+function alertKey(campaignId: string | null | undefined, type: string) {
+  return `${campaignId ?? ""}|${type}`;
+}
+
 /**
- * Create an alert only if no unread alert of the same type
- * exists for the same campaign in the last 24 hours.
+ * Create an alert only if no unread alert of the same type already exists
+ * for the same campaign, however old. (A time window here re-created the
+ * alert every day it stayed unread.) Once read, the alert can fire again.
  * When a new alert is created, sends a WhatsApp notification.
  */
-async function createAlertIfNew(input: AlertInput, client: Client) {
-  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
-  const existing = await prisma.alert.findFirst({
-    where: {
-      clientId: input.clientId,
-      campaignId: input.campaignId ?? null,
-      type: input.type as never,
-      isRead: false,
-      createdAt: { gte: twentyFourHoursAgo },
-    },
-  });
-
-  if (existing) return null;
+async function createAlertIfNewInternal(input: AlertInput, client: Client, openAlerts: Set<string>) {
+  const key = alertKey(input.campaignId, input.type);
+  if (openAlerts.has(key)) return null;
+  openAlerts.add(key);
 
   const alert = await prisma.alert.create({
     data: {
