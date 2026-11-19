@@ -84,12 +84,19 @@ export function getPlatformColor(platform: string): string {
   return colors[platform] ?? "#6B7280";
 }
 
+// ── Client secrets ──────────────────────────────────────────
+/** Blank out the TeleCRM token before a client leaves the server; `hasTelecrmToken` says whether one is set. */
+export function withoutSecrets<T extends { telecrmToken?: string | null }>(client: T) {
+  return { ...client, telecrmToken: null, hasTelecrmToken: !!client.telecrmToken };
+}
+
 // ── Lead source labels ──────────────────────────────────────
 export function getLeadSourceLabel(source: string): string {
   const labels: Record<string, string> = {
     WHATSAPP: "WhatsApp",
     META_FORM: "Meta Lead Form",
     WEBSITE: "Website",
+    MANUAL: "Manual / Call",
   };
   return labels[source] ?? source;
 }
@@ -99,6 +106,7 @@ export function getLeadSourceColor(source: string): string {
     WHATSAPP: "#25D366",
     META_FORM: "#1877F2",
     WEBSITE: "#F97316",
+    MANUAL: "#8B5CF6",
   };
   return colors[source] ?? "#6B7280";
 }

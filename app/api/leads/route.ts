@@ -4,7 +4,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import type { LeadFilters, LeadSource } from "@/types";
 
-const LEAD_SOURCES: LeadSource[] = ["WHATSAPP", "META_FORM", "WEBSITE"];
+const LEAD_SOURCES: LeadSource[] = ["WHATSAPP", "META_FORM", "WEBSITE", "MANUAL"];
 
 function parseDate(value: string | null): Date | undefined {
   if (!value) return undefined;
@@ -48,6 +48,7 @@ export async function GET(request: Request) {
           { phone: { contains: filters.search } },
           { email: { contains: filters.search, mode: "insensitive" } },
           { campaign: { contains: filters.search, mode: "insensitive" } },
+          { crmStatus: { contains: filters.search, mode: "insensitive" } },
         ],
       }),
     };

@@ -23,11 +23,14 @@ import {
   resolveMetaAccessToken,
 } from "@/lib/metaAds";
 import { runAlertEngine } from "@/lib/alertEngine";
+import { syncTeleCrmLeads } from "@/lib/telecrmSync";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "crypto";
 import type { DailyStatEntry, RawCampaignData } from "@/types";
 
 const SYNC_CONCURRENCY = 3;
+
+export const maxDuration = 300;
 
 // ── POST /api/sync ──────────────────────────────────────────
 export async function POST(request: Request) {
@@ -67,11 +70,20 @@ export async function POST(request: Request) {
       .filter((r): r is PromiseRejectedResult => r.status === "rejected")
       .map((r) => r.reason?.message ?? String(r.reason));
 
+    // TeleCRM leads — independent of campaign sync, so failures are only reported
+    let telecrm: Awaited<ReturnType<typeof syncTeleCrmLeads>> = [];
+    try {
+      telecrm = await syncTeleCrmLeads(clientId ? { clientIds: [clientId] } : {});
+    } catch (error) {
+      console.error("[TeleCRM sync]", error);
+    }
+
     return NextResponse.json({
       message: `Sync complete: ${succeeded} succeeded, ${failed} failed`,
       synced: succeeded,
       failed,
       errors: errors.length > 0 ? errors : undefined,
+      telecrm: telecrm.length > 0 ? telecrm : undefined,
     });
   } catch (error) {
     console.error("[POST /api/sync]", error);

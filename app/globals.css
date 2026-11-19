@@ -78,14 +78,17 @@
   }
 }
 
+@layer components {
+  /* Shared table header cell look used by every data table.
+     Lives in components so utilities like text-right and pl-5 can override it. */
+  .th {
+    @apply px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap;
+  }
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;
-  }
-
-  /* Shared table header cell look used by every data table */
-  .th {
-    @apply px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wider text-muted-foreground whitespace-nowrap;
   }
 
   .animate-fade-in {

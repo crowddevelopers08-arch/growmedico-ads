@@ -13,7 +13,8 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
     "db:clean-demo": "tsx prisma/clean-demo.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "telecrm:backfill": "tsx scripts/telecrm-backfill.ts"
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.7.4",

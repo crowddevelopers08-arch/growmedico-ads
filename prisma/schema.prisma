@@ -51,6 +51,10 @@ model Client {
   amountDue    Float      @default(0)  // Unbilled spend owed on postpaid (card/invoice) accounts
   fundingLabel String?                // e.g. "VISA *2991", "monthly invoicing"
   balanceUpdatedAt DateTime?
+  // TeleCRM — clients sharing an enterprise ID (e.g. branches) are synced as one account
+  telecrmEnterpriseId String?
+  telecrmToken        String?   // TeleCRM "Sync" API token — never sent to the browser
+  telecrmSyncedAt     DateTime?
   notes        String?
   campaigns    Campaign[]
   alerts       Alert[]
@@ -159,6 +163,8 @@ model Lead {
   message    String?
   campaign   String?    // Campaign / form / page name the lead came from
   externalId String?    // Platform lead ID (e.g. Meta leadgen_id) — used for dedupe
+  crmId      String?    // TeleCRM lead ID
+  crmStatus  String?    // TeleCRM pipeline status (Fresh, Interested, Appointment Booked…)
   metadata   Json?      // Raw form fields / extra context
   createdAt  DateTime   @default(now())
   updatedAt  DateTime   @updatedAt
@@ -167,6 +173,7 @@ model Lead {
   @@index([clientId, createdAt])
   @@index([source])
   @@index([createdAt])
+  @@index([crmId])
   @@map("leads")
 }
 
@@ -209,6 +216,7 @@ enum LeadSource {
   WHATSAPP
   META_FORM
   WEBSITE
+  MANUAL    // Added by hand in a CRM (calls, walk-ins)
 }
 
 enum SyncStatus {

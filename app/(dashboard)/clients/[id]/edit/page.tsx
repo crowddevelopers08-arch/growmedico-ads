@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { Header } from "@/components/layout/Header";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { ClientForm } from "@/components/clients/ClientForm";
+import { withoutSecrets } from "@/lib/utils";
 
 interface Params {
   params: Promise<{ id: string }>;
@@ -29,7 +30,7 @@ export default async function EditClientPage({ params }: Params) {
           title="Edit client"
           description={<>Update account and notification settings for <strong className="font-medium text-foreground">{client.name}</strong>.</>}
         />
-        <ClientForm client={client} mode="edit" />
+        <ClientForm client={withoutSecrets(client)} mode="edit" />
       </div>
     </div>
   );

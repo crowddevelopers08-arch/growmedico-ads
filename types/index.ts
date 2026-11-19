@@ -271,4 +271,6 @@ export interface ClientFormValues {
   accessToken: string;
   refreshToken: string;
   notes: string;
+  telecrmEnterpriseId: string;
+  telecrmToken: string;
 }

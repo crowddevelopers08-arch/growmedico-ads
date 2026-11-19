@@ -263,7 +263,7 @@ export default async function ClientDetailPage({ params }: Params) {
         <section className="space-y-4">
           <SectionHeading
             title="Leads"
-            description={`WhatsApp, Meta Lead Form and website enquiries for ${client.name}`}
+            description={`WhatsApp, Meta Lead Form, website and call enquiries for ${client.name}`}
           />
           <LeadsView clientId={client.id} />
         </section>

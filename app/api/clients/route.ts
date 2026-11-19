@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { withoutSecrets } from "@/lib/utils";
 import type { CreateClientInput } from "@/types";
 
 // ── Validation schema ───────────────────────────────────────
@@ -17,6 +18,8 @@ const createClientSchema = z.object({
   accessToken: z.string().optional(),
   refreshToken: z.string().optional(),
   notes: z.string().max(500).optional(),
+  telecrmEnterpriseId: z.string().max(64).optional(),
+  telecrmToken: z.string().max(500).optional(),
 });
 
 // ── GET /api/clients ────────────────────────────────────────
@@ -62,7 +65,7 @@ export async function GET(request: Request) {
       orderBy: { createdAt: "desc" },
     });
 
-    return NextResponse.json({ data: clients });
+    return NextResponse.json({ data: clients.map(withoutSecrets) });
   } catch (error) {
     console.error("[GET /api/clients]", error);
     return NextResponse.json({ error: "Failed to fetch clients" }, { status: 500 });
@@ -117,10 +120,12 @@ export async function POST(request: Request) {
         accessToken: validated.data.accessToken,
         refreshToken: validated.data.refreshToken,
         notes: validated.data.notes,
+        telecrmEnterpriseId: validated.data.telecrmEnterpriseId?.trim() || null,
+        telecrmToken: validated.data.telecrmToken?.trim() || null,
       },
     });
 
-    return NextResponse.json({ data: client }, { status: 201 });
+    return NextResponse.json({ data: withoutSecrets(client) }, { status: 201 });
   } catch (error) {
     if ((error as { code?: string }).code === "P2002") {
       return NextResponse.json(

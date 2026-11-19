@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { z } from "zod";
+import { withoutSecrets } from "@/lib/utils";
 
 const updateClientSchema = z.object({
   name: z.string().min(1).max(100).optional(),
@@ -15,6 +16,8 @@ const updateClientSchema = z.object({
   refreshToken: z.string().optional(),
   isActive: z.boolean().optional(),
   notes: z.string().max(500).optional(),
+  telecrmEnterpriseId: z.string().max(64).optional(),
+  telecrmToken: z.string().max(500).optional(),
 });
 
 // ── GET /api/clients/[id] ───────────────────────────────────
@@ -52,7 +55,7 @@ export async function GET(
       return NextResponse.json({ error: "Client not found" }, { status: 404 });
     }
 
-    return NextResponse.json({ data: client });
+    return NextResponse.json({ data: withoutSecrets(client) });
   } catch (error) {
     console.error(`[GET /api/clients/${id}]`, error);
     return NextResponse.json({ error: "Failed to fetch client" }, { status: 500 });
@@ -88,11 +91,16 @@ export async function PATCH(
         ...(validated.data.metaPageId !== undefined && {
           metaPageId: validated.data.metaPageId || null,
         }),
+        ...(validated.data.telecrmEnterpriseId !== undefined && {
+          telecrmEnterpriseId: validated.data.telecrmEnterpriseId.trim() || null,
+        }),
+        // Blank token = keep the stored one
+        telecrmToken: validated.data.telecrmToken?.trim() || undefined,
         updatedAt: new Date(),
       },
     });
 
-    return NextResponse.json({ data: client });
+    return NextResponse.json({ data: withoutSecrets(client) });
   } catch (error: unknown) {
     const e = error as { code?: string };
     if (e.code === "P2025") {

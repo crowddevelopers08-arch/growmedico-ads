@@ -18,18 +18,19 @@ import { useLeads } from "@/hooks/useLeads";
 import { useClients } from "@/hooks/useClients";
 import { cn, formatDate, formatNumber, getLeadSourceColor, getLeadSourceLabel } from "@/lib/utils";
 import type { LeadSource } from "@/types";
-import { Globe, Inbox, Layers, Mail, MessageCircle, Phone, Search, FileText } from "lucide-react";
+import { Globe, Inbox, Layers, Mail, MessageCircle, Phone, PhoneIncoming, Search, FileText } from "lucide-react";
 
 const PAGE_SIZE = 25;
-   
+
 const SOURCE_ICONS = {
   ALL: Layers,
   WHATSAPP: MessageCircle,
   META_FORM: FileText,
   WEBSITE: Globe,
+  MANUAL: PhoneIncoming,
 } as const;
 
-const SOURCES: LeadSource[] = ["WHATSAPP", "META_FORM", "WEBSITE"];
+const SOURCES: LeadSource[] = ["WHATSAPP", "META_FORM", "WEBSITE", "MANUAL"];
 
 type DatePreset =
   | "ALL" | "TODAY" | "YESTERDAY" | "LAST_7" | "LAST_30"
@@ -179,7 +180,7 @@ export function LeadsView({ clientId: lockedClientId }: LeadsViewProps) {
       </div>
 
       {/* Source breakdown — doubles as the source filter */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {(["ALL", ...SOURCES] as const).map((s) => {
           const count = s === "ALL" ? allCount : countsBySource[s];
           const active = source === s;
@@ -234,6 +235,7 @@ export function LeadsView({ clientId: lockedClientId }: LeadsViewProps) {
                     <th className="th pl-5">Received</th>
                     <th className="th">Lead</th>
                     <th className="th">Source</th>
+                    <th className="th">Status</th>
                     {!lockedClientId && <th className="th">Client</th>}
                     <th className="th">Campaign</th>
                     <th className="th pr-5">Message</th>
@@ -276,6 +278,15 @@ export function LeadsView({ clientId: lockedClientId }: LeadsViewProps) {
                         >
                           {getLeadSourceLabel(lead.source)}
                         </span>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3">
+                        {lead.crmStatus ? (
+                          <span className="inline-flex rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground/80" title="TeleCRM status">
+                            {lead.crmStatus}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </td>
                       {!lockedClientId && (
                         <td className="whitespace-nowrap px-4 py-3">

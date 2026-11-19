@@ -29,7 +29,7 @@ const CORS_HEADERS = {
 
 const ingestSchema = z.object({
   clientId: z.string().min(1),
-  source: z.enum(["WHATSAPP", "WEBSITE", "META_FORM"]),
+  source: z.enum(["WHATSAPP", "WEBSITE", "META_FORM", "MANUAL"]),
   name: z.string().max(200).optional(),
   phone: z.string().max(30).optional(),
   email: z.string().max(200).optional(),

@@ -18,7 +18,7 @@ interface UseLeadsReturn {
   refetch: () => void;
 }
 
-const EMPTY_COUNTS: Record<LeadSource, number> = { WHATSAPP: 0, META_FORM: 0, WEBSITE: 0 };
+const EMPTY_COUNTS: Record<LeadSource, number> = { WHATSAPP: 0, META_FORM: 0, WEBSITE: 0, MANUAL: 0 };
 
 export function useLeads(options: UseLeadsOptions = {}): UseLeadsReturn {
   const { clientId, source, from, to, search, page = 1, pageSize = 25 } = options;

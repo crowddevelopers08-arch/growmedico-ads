@@ -21,7 +21,7 @@ import { Loader2, Save, ArrowLeft, CheckCircle2, XCircle, ShieldCheck } from "lu
 import Link from "next/link";
 
 interface ClientFormProps {
-  client?: Client;
+  client?: Client & { hasTelecrmToken?: boolean };
   mode: "create" | "edit";
 }
 
@@ -37,6 +37,8 @@ const DEFAULT_VALUES: ClientFormValues = {
   accessToken: "",
   refreshToken: "",
   notes: "",
+  telecrmEnterpriseId: "",
+  telecrmToken: "",
 };
 
 export function ClientForm({ client, mode }: ClientFormProps) {
@@ -58,6 +60,8 @@ export function ClientForm({ client, mode }: ClientFormProps) {
     accessToken: "",
     refreshToken: "",
     notes: client?.notes ?? DEFAULT_VALUES.notes,
+    telecrmEnterpriseId: client?.telecrmEnterpriseId ?? DEFAULT_VALUES.telecrmEnterpriseId,
+    telecrmToken: "",
   });
 
   const set = (field: keyof ClientFormValues) => (
@@ -113,6 +117,7 @@ export function ClientForm({ client, mode }: ClientFormProps) {
         // Only send tokens if they have values
         accessToken: values.accessToken || undefined,
         refreshToken: values.refreshToken || undefined,
+        telecrmToken: values.telecrmToken || undefined,
         email: values.email || undefined,
       };
 
@@ -399,6 +404,55 @@ export function ClientForm({ client, mode }: ClientFormProps) {
                   />
                 </div>
               </>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* TeleCRM */}
+        <Card>
+          <CardHeader>
+            <CardTitle>TeleCRM</CardTitle>
+            <CardDescription>
+              Pull this client&apos;s WhatsApp, website, Meta form and call leads from their TeleCRM account
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="telecrmEnterpriseId">Enterprise ID</Label>
+              <Input
+                id="telecrmEnterpriseId"
+                value={values.telecrmEnterpriseId}
+                onChange={set("telecrmEnterpriseId")}
+                placeholder="e.g. 6872081e90707ae0095de5ce"
+                disabled={loading}
+                autoComplete="off"
+              />
+              <p className="text-xs text-muted-foreground">
+                Branches sharing one TeleCRM account can use the same ID. Their leads are split by campaign name;
+                leads without a matching campaign go to the oldest of those clients.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="telecrmToken">Sync Token</Label>
+              <Input
+                id="telecrmToken"
+                type="password"
+                value={values.telecrmToken}
+                onChange={set("telecrmToken")}
+                placeholder={client?.hasTelecrmToken ? "Saved. Leave blank to keep it" : "TeleCRM Sync API token"}
+                disabled={loading}
+                autoComplete="off"
+              />
+              <p className="text-xs text-muted-foreground">
+                TeleCRM → Integrations → Website/API Integration → Create new token → <strong>Sync</strong>.
+              </p>
+            </div>
+
+            {client?.telecrmSyncedAt && (
+              <p className="text-xs text-muted-foreground">
+                Last synced {new Date(client.telecrmSyncedAt).toLocaleString()}
+              </p>
             )}
           </CardContent>
         </Card>
