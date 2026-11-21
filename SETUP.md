@@ -137,6 +137,48 @@ Recommended: run every 6 hours.
 
 ---
 
+## Audit sheets
+
+The **Audit Sheets** page (`/audit`) builds the weekly PM audit automatically: one tab per
+client in a fixed layout, plus a MENU tab. Ad numbers come from synced campaign daily stats
+(last 90 days), CRM numbers from TeleCRM leads. Sync ads and TeleCRM before generating.
+
+- **Download Excel** works with no extra setup.
+- **Update Google Sheet** writes the same layout into a Google Sheet. Each run rewrites only
+  the weeks you pick, keeps older weeks, and keeps the team's *Notes*, *Action* and MENU
+  *Media Buyer* cells.
+
+### One-time Google Sheets setup
+1. In Google Cloud Console → create a project (or reuse one) → enable **Google Sheets API**.
+2. IAM & Admin → Service Accounts → create one → Keys → Add key → JSON.
+3. Add to `.env` (and your hosting env vars):
+   ```
+   GOOGLE_SERVICE_ACCOUNT_EMAIL=audit-bot@your-project.iam.gserviceaccount.com
+   GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+   AUDIT_SPREADSHEET_ID=   # optional default sheet (the ID from its URL)
+   ```
+4. Create a **new, empty** Google Sheet and share it with the service account email as **Editor**.
+5. Paste the sheet link on the Audit Sheets page and click **Update Google Sheet**.
+
+### Weekly automatic update
+Every Monday morning (after the Sunday-night sync), call:
+
+```bash
+curl -X POST https://your-app.com/api/audit/sheet \
+  -H "x-cron-secret: YOUR_CRON_SECRET" -H "Content-Type: application/json" -d '{}'
+```
+
+With an empty body it writes last week (Mon–Sun) for all active clients into `AUDIT_SPREADSHEET_ID`.
+
+### How CRM stages map to columns
+TeleCRM stage names differ per client, so they're grouped by keyword (`lib/audit/statusBuckets.ts`):
+*Visited* (won, visited, consultation done…), *Appt Booked* (appointment, booked, scheduled, no-show —
+the sheet's Appt Booked column also includes Visited), *RNR* (RNR, switched off…), *Not Interested*
+(lost, disqualified, just curious…), *Out of Location*, *Other / Invalid* (wrong number, duplicate…),
+*Interested / Call Back*, and *Not Yet Called* (Fresh / no stage). Edit the rules there to change it.
+
+---
+
 ## API Integration
 
 ### Google Ads

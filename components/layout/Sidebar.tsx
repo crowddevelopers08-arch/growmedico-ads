@@ -10,6 +10,7 @@ import {
   Bell,
   BarChart3,
   Inbox,
+  FileSpreadsheet,
   LogOut,
   X,
 } from "lucide-react";
@@ -22,6 +23,7 @@ const navItems = [
   { href: "/clients", icon: Users, label: "Clients" },
   { href: "/campaigns", icon: BarChart3, label: "Campaigns" },
   { href: "/leads", icon: Inbox, label: "Leads" },
+  { href: "/audit", icon: FileSpreadsheet, label: "Audit Sheets" },
   { href: "/alerts", icon: Bell, label: "Alerts", showBadge: true },
 ];
 

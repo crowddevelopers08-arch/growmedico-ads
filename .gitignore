@@ -14,3 +14,7 @@ tsconfig.tsbuildinfo
 .env.test.local
 .env.production.local
 !.env.example
+
+# Google service account key (Audit Sheets)
+google-key.json
+*.iam.gserviceaccount.com.json
