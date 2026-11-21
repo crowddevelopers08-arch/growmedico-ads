@@ -18,24 +18,23 @@ npm install
 
 ## 2. Configure environment variables
 
-```bash
-cp .env.example .env
-```
-
-Edit `.env` with your values:
+All settings live in a single `.env` file in the project root (never committed to git).
+Copy the same variables into your hosting provider's environment settings.
 
 | Variable | Description |
 |---|---|
-| `DATABASE_URL` | PostgreSQL connection string |
+| `DATABASE_URL` / `DATABASE_URL_UNPOOLED` | PostgreSQL connection strings (pooled for the app, unpooled for migrations) |
 | `NEXTAUTH_SECRET` | Random 32+ char secret (use `openssl rand -base64 32`) |
-| `NEXTAUTH_URL` | Your app URL |
-| `GOOGLE_ADS_DEVELOPER_TOKEN` | From Google Ads API Center |
-| `GOOGLE_ADS_CLIENT_ID` | Google OAuth2 client ID |
-| `GOOGLE_ADS_CLIENT_SECRET` | Google OAuth2 client secret |
-| `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | Manager Account ID |
-| `META_APP_ID` | Meta App ID |
-| `META_APP_SECRET` | Meta App Secret |
-| `CRON_SECRET` | Random secret for sync cron jobs |
+| `NEXTAUTH_URL` / `NEXT_PUBLIC_APP_URL` | Your app URL |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | Admin login created by `npm run db:seed` |
+| `CRON_SECRET` | Random secret for sync / audit cron jobs |
+| `BUDGET_ALERT_THRESHOLD` | Budget-used % that triggers an alert |
+| `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`, `GOOGLE_ADS_LOGIN_CUSTOMER_ID`, `GOOGLE_ADS_REFRESH_TOKEN` | Google Ads API (manager account) |
+| `META_APP_ID`, `META_APP_SECRET`, `META_API_VERSION`, `META_ACCESS_TOKEN` | Meta Ads API |
+| `META_WEBHOOK_VERIFY_TOKEN`, `META_PAGE_ACCESS_TOKEN`, `LEADS_INGEST_SECRET` | Lead webhooks / ingest |
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_WHATSAPP_FROM`, `WHATSAPP_ADMIN_PHONE` | WhatsApp alerts |
+| `GOOGLE_SERVICE_ACCOUNT_EMAIL`, `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY`, `AUDIT_SPREADSHEET_ID` | Audit Sheets → Google Sheets |
+| `TELECRM_REFRESH_DAYS` | Optional — days of TeleCRM leads re-read on each sync (default 30) |
 
 ---
 
