@@ -1,3 +1,4 @@
+import "@/lib/authEnv"; // must run before NextAuth reads AUTH_URL / NEXTAUTH_URL
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
@@ -5,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 import type { NextAuthConfig } from "next-auth";
 
 export const authConfig: NextAuthConfig = {
+  // Use the incoming request's host (Vercel domain / custom domain) for redirects
+  trustHost: true,
   providers: [
     Credentials({
       name: "credentials",

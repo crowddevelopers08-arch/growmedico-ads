@@ -1,3 +1,4 @@
+import "@/lib/authEnv"; // must run before NextAuth reads AUTH_URL / NEXTAUTH_URL
 import NextAuth from "next-auth";
 import { authConfig } from "@/auth.config";
 

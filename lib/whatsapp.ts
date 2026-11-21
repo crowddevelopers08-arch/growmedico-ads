@@ -13,6 +13,8 @@
  *   WHATSAPP_ADMIN_PHONE — Admin number that receives ALL alerts (e.g. +1234567890)
  */
 
+import { appBaseUrl } from "@/lib/authEnv";
+
 const TWILIO_BASE = "https://api.twilio.com/2010-04-01/Accounts";
 
 export interface WhatsAppPayload {
@@ -78,7 +80,7 @@ const SEVERITY_EMOJI: Record<string, string> = {
  */
 export async function sendAlertNotification(opts: AlertNotificationOptions): Promise<void> {
   const emoji = SEVERITY_EMOJI[opts.severity] ?? "⚠️";
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  const appUrl = appBaseUrl();
 
   const message =
     `${emoji} *AdPulse Alert — ${opts.clientName}*\n\n` +

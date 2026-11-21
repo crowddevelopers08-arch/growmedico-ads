@@ -6,6 +6,8 @@
 import type { NextAuthConfig } from "next-auth";
 
 export const authConfig: NextAuthConfig = {
+  // Use the incoming request's host (Vercel domain / custom domain) for redirects
+  trustHost: true,
   providers: [],
   pages: {
     signIn: "/login",
