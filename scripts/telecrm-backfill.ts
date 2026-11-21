@@ -3,19 +3,19 @@
  * re-reads the last TELECRM_REFRESH_DAYS days). Safe to re-run — leads are upserted.
  *
  *   npm run telecrm:backfill                  # all TeleCRM accounts
- *   npm run telecrm:backfill -- <clientId>    # only the account linked to this client
+ *   npm run telecrm:backfill -- <clientId>…   # only the accounts linked to these clients
  */
 
 import { prisma } from "@/lib/prisma";
 import { syncTeleCrmLeads } from "@/lib/telecrmSync";
 
 async function main() {
-  const clientId = process.argv[2];
+  const clientIds = process.argv.slice(2);
   const started = Date.now();
 
   const results = await syncTeleCrmLeads({
     full: true,
-    clientIds: clientId ? [clientId] : undefined,
+    clientIds: clientIds.length > 0 ? clientIds : undefined,
     onProgress: (msg) => process.stdout.write(`\r${msg}   `),
   });
   process.stdout.write("\n");

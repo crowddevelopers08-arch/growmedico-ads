@@ -13,6 +13,7 @@ import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorMessage } from "@/components/shared/ErrorMessage";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Pagination } from "@/components/shared/Pagination";
+import { ClientSelect } from "@/components/shared/ClientSelect";
 import { useCampaigns } from "@/hooks/useCampaigns";
 import { useClients } from "@/hooks/useClients";
 import type { CampaignSortField } from "@/types";
@@ -147,17 +148,12 @@ export default function CampaignsPage() {
             />
           </div>
 
-          <Select value={clientId} onValueChange={(v) => { setClientId(v); resetPage(); }}>
-            <SelectTrigger className="w-[calc(50%-4px)] bg-card sm:w-[190px]">
-              <SelectValue placeholder="Client" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">All clients</SelectItem>
-              {clients.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <ClientSelect
+            clients={clients}
+            value={clientId}
+            onChange={(v) => { setClientId(v); resetPage(); }}
+            className="w-[calc(50%-4px)] sm:w-[190px]"
+          />
 
           <Select value={platform} onValueChange={(v) => { setPlatform(v as typeof platform); resetPage(); }}>
             <SelectTrigger className="w-[calc(50%-4px)] bg-card sm:w-[150px]">

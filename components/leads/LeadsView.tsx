@@ -14,6 +14,7 @@ import { PageLoader } from "@/components/shared/LoadingSpinner";
 import { EmptyState } from "@/components/shared/EmptyState";
 import { ErrorMessage } from "@/components/shared/ErrorMessage";
 import { Pagination } from "@/components/shared/Pagination";
+import { ClientSelect } from "@/components/shared/ClientSelect";
 import { useLeads } from "@/hooks/useLeads";
 import { useClients } from "@/hooks/useClients";
 import { cn, formatDate, formatNumber, getLeadSourceColor, getLeadSourceLabel } from "@/lib/utils";
@@ -132,17 +133,12 @@ export function LeadsView({ clientId: lockedClientId }: LeadsViewProps) {
         </div>
 
         {!lockedClientId && (
-          <Select value={clientId} onValueChange={(v) => { setClientId(v); resetPage(); }}>
-            <SelectTrigger className="w-[calc(50%-4px)] bg-card sm:w-[190px]">
-              <SelectValue placeholder="Client" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="ALL">All clients</SelectItem>
-              {clients.map((c) => (
-                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <ClientSelect
+            clients={clients}
+            value={clientId}
+            onChange={(v) => { setClientId(v); resetPage(); }}
+            className="w-[calc(50%-4px)] sm:w-[190px]"
+          />
         )}
 
         <Select value={datePreset} onValueChange={(v) => { setDatePreset(v as DatePreset); resetPage(); }}>

@@ -73,13 +73,16 @@ export function BalanceBlock({ client, className }: { client: BalanceFields; cla
       >
         <Icon className="h-4 w-4" />
       </div>
-      <div className="min-w-0 flex-1">
+      <div className="shrink-0">
         <p className="text-[11px] text-muted-foreground">{balanceLabel(client)}</p>
-        <p className={cn("text-lg font-semibold leading-tight tabular-nums", balanceToneClass[tone])}>
+        <p className={cn("whitespace-nowrap text-lg font-semibold leading-tight tabular-nums", balanceToneClass[tone])}>
           {balanceValue(client)}
         </p>
       </div>
-      <p className={cn("max-w-[45%] truncate text-right text-[11px]", tone === "critical" || tone === "warning" ? balanceToneClass[tone] : "text-muted-foreground")}>
+      <p
+        title={balanceCaption(client)}
+        className={cn("min-w-0 flex-1 truncate text-right text-[11px]", tone === "critical" || tone === "warning" ? balanceToneClass[tone] : "text-muted-foreground")}
+      >
         {balanceCaption(client)}
       </p>
     </div>
