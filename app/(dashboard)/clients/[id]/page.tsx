@@ -30,7 +30,7 @@ export const dynamic = "force-dynamic";
 
 interface Params {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ range?: string; from?: string; to?: string }>;
+  searchParams: Promise<{ range?: string; from?: string; to?: string; crmStatus?: string }>;
 }
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
