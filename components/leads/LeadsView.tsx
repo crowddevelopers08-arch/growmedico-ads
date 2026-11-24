@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   startOfDay, endOfDay, subDays, startOfMonth, endOfMonth, subMonths, parseISO,
 } from "date-fns";
@@ -34,7 +35,7 @@ const SOURCE_ICONS = {
 const SOURCES: LeadSource[] = ["WHATSAPP", "META_FORM", "WEBSITE", "MANUAL"];
 
 type DatePreset =
-  | "ALL" | "TODAY" | "YESTERDAY" | "LAST_7" | "LAST_30"
+  | "ALL" | "TODAY" | "YESTERDAY" | "LAST_7" | "THIS_WEEK" | "LAST_30"
   | "THIS_MONTH" | "LAST_MONTH" | "CUSTOM";
 
 const DATE_PRESETS: { value: DatePreset; label: string }[] = [
@@ -42,6 +43,7 @@ const DATE_PRESETS: { value: DatePreset; label: string }[] = [
   { value: "TODAY", label: "Today" },
   { value: "YESTERDAY", label: "Yesterday" },
   { value: "LAST_7", label: "Last 7 days" },
+  { value: "THIS_WEEK", label: "This week" },
   { value: "LAST_30", label: "Last 30 days" },
   { value: "THIS_MONTH", label: "This month" },
   { value: "LAST_MONTH", label: "Last month" },
@@ -61,6 +63,7 @@ function resolveRange(
     case "TODAY": return range(startOfDay(now), endOfDay(now));
     case "YESTERDAY": return range(startOfDay(subDays(now, 1)), endOfDay(subDays(now, 1)));
     case "LAST_7": return range(startOfDay(subDays(now, 6)), endOfDay(now));
+    case "THIS_WEEK": return range(startOfDay(subDays(now, (now.getDay() + 6) % 7)), endOfDay(now));
     case "LAST_30": return range(startOfDay(subDays(now, 29)), endOfDay(now));
     case "THIS_MONTH": return range(startOfMonth(now), endOfDay(now));
     case "LAST_MONTH": {
@@ -85,16 +88,29 @@ function whatsappLink(phone: string) {
 interface LeadsViewProps {
   /** When set, the client filter is hidden and results are locked to this client. */
   clientId?: string;
+  initialDatePreset?: DatePreset;
+  initialFrom?: string;
+  initialTo?: string;
+  initialCrmStatus?: string;
 }
 
-export function LeadsView({ clientId: lockedClientId }: LeadsViewProps) {
+export function LeadsView({ clientId: lockedClientId, initialDatePreset = "LAST_30", initialFrom = "", initialTo = "", initialCrmStatus }: LeadsViewProps) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [search, setSearch] = useState("");
   const [clientId, setClientId] = useState("ALL");
   const [source, setSource] = useState<LeadSource | "ALL">("ALL");
-  const [datePreset, setDatePreset] = useState<DatePreset>("LAST_30");
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
+  const [datePreset, setDatePreset] = useState<DatePreset>(initialDatePreset);
+  const [customFrom, setCustomFrom] = useState(initialFrom);
+  const [customTo, setCustomTo] = useState(initialTo);
+  const [crmStatus, setCrmStatus] = useState(initialCrmStatus ?? "");
   const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    if (initialCrmStatus) {
+      document.getElementById("client-leads")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [initialCrmStatus]);
 
   const { clients } = useClients();
   const { from, to } = useMemo(
@@ -107,6 +123,7 @@ export function LeadsView({ clientId: lockedClientId }: LeadsViewProps) {
   const { leads, total, totalPages, countsBySource, isLoading, error } = useLeads({
     clientId: effectiveClientId,
     source: source !== "ALL" ? source : undefined,
+    crmStatus: crmStatus || undefined,
     from,
     to,
     search: search.length > 1 ? search : undefined,
@@ -175,6 +192,25 @@ export function LeadsView({ clientId: lockedClientId }: LeadsViewProps) {
         )}
       </div>
 
+      {crmStatus && (
+        <div className="flex items-center gap-2 rounded-lg border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
+          <span>Showing TeleCRM status: <strong>{crmStatus}</strong></span>
+          <button
+            type="button"
+            onClick={() => {
+              setCrmStatus("");
+              resetPage();
+              const next = new URLSearchParams(searchParams.toString());
+              next.delete("crmStatus");
+              router.push(`?${next.toString()}`, { scroll: false });
+            }}
+            className="ml-auto text-primary hover:underline"
+          >
+            Clear status filter
+          </button>
+        </div>
+      )}
+
       {/* Source breakdown — doubles as the source filter */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         {(["ALL", ...SOURCES] as const).map((s) => {
@@ -225,16 +261,16 @@ export function LeadsView({ clientId: lockedClientId }: LeadsViewProps) {
         <div className="space-y-4">
           <Card className="overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full min-w-[1600px] table-fixed text-sm">
                 <thead>
                   <tr className="border-b bg-muted/40">
-                    <th className="th pl-5">Received</th>
-                    <th className="th">Lead</th>
-                    <th className="th">Source</th>
-                    <th className="th">Status</th>
-                    {!lockedClientId && <th className="th">Client</th>}
-                    <th className="th">Campaign</th>
-                    <th className="th pr-5">Message</th>
+                    <th className="th w-[140px] pl-5">Received</th>
+                    <th className="th w-[240px]">Lead</th>
+                    <th className="th w-[160px]">Source</th>
+                    <th className="th w-[200px]">Status</th>
+                    {!lockedClientId && <th className="th w-[240px]">Client</th>}
+                    <th className="th w-[280px]">Campaign</th>
+                    <th className="th w-[400px] pr-5">Message</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -291,11 +327,11 @@ export function LeadsView({ clientId: lockedClientId }: LeadsViewProps) {
                           </Link>
                         </td>
                       )}
-                      <td className="max-w-[200px] truncate px-4 py-3 text-muted-foreground" title={lead.campaign ?? undefined}>
+                      <td className="break-words px-4 py-3 text-muted-foreground" title={lead.campaign ?? undefined}>
                         {lead.campaign || "—"}
                       </td>
                       <td className="max-w-[280px] py-3 pl-4 pr-5 text-muted-foreground" title={lead.message ?? undefined}>
-                        <p className="line-clamp-2">{lead.message || "—"}</p>
+                        <p className="whitespace-pre-wrap break-words">{lead.message || "—"}</p>
                       </td>
                     </tr>
                   ))}

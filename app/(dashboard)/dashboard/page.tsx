@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { PageHeader } from "@/components/shared/PageHeader";
+import { ClientDateFilter } from "@/components/clients/ClientDateFilter";
 import { StatsCard } from "@/components/dashboard/StatsCard";
 import { AvailableFundsCard } from "@/components/dashboard/AvailableFundsCard";
 import { AccountBalances } from "@/components/dashboard/AccountBalances";
@@ -27,14 +28,33 @@ import type { Metadata } from "next";
 export const metadata: Metadata = { title: "Overview" };
 export const dynamic = "force-dynamic";
 
-async function getDashboardData() {
-  const [campaigns, clients, alerts, unreadAlerts, topCampaigns] = await Promise.all([
+function dashboardRange(range: string, from?: string, to?: string) {
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const shift = (date: string, days: number) => {
+    const d = new Date(`${date}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+  switch (range) {
+    case "TODAY": return { from: today, to: today };
+    case "YESTERDAY": { const day = shift(today, -1); return { from: day, to: day }; }
+    case "LAST_7": return { from: shift(today, -6), to: today };
+    case "THIS_WEEK": return { from: shift(today, -((new Date(`${today}T00:00:00Z`).getUTCDay() + 6) % 7)), to: today };
+    case "THIS_MONTH": return { from: `${today.slice(0, 7)}-01`, to: today };
+    case "LAST_MONTH": {
+      const end = shift(`${today.slice(0, 7)}-01`, -1);
+      return { from: `${end.slice(0, 7)}-01`, to: end };
+    }
+    case "CUSTOM": return { from: from || undefined, to: to || undefined };
+    case "ALL": return {};
+    default: return { from: shift(today, -29), to: today };
+  }
+}
+
+async function getDashboardData(range: { from?: string; to?: string }) {
+  const [campaigns, clients, alerts, unreadAlerts] = await Promise.all([
     prisma.campaign.findMany({
-      select: {
-        spend: true, clicks: true, impressions: true,
-        conversions: true, status: true, dailyBudget: true,
-        totalBudget: true, platform: true, dailyStats: true,
-      },
+      include: { client: { select: { id: true, name: true, platform: true } } },
     }),
     prisma.client.findMany({
       where: { isActive: true },
@@ -50,18 +70,26 @@ async function getDashboardData() {
       take: 5,
     }),
     prisma.alert.count({ where: { isRead: false } }),
-    prisma.campaign.findMany({
-      where: { status: "ACTIVE" },
-      include: { client: { select: { id: true, name: true, platform: true } } },
-      orderBy: { spend: "desc" },
-      take: 8,
-    }),
   ]);
 
-  const totalSpend = campaigns.reduce((s, c) => s + c.spend, 0);
-  const totalConversions = campaigns.reduce((s, c) => s + c.conversions, 0);
-  const totalClicks = campaigns.reduce((s, c) => s + c.clicks, 0);
-  const totalImpressions = campaigns.reduce((s, c) => s + c.impressions, 0);
+  const hasRange = Boolean(range.from || range.to);
+  const visibleCampaigns = campaigns.map((campaign) => {
+    if (!hasRange) return campaign;
+    const stats = safeJsonParse<DailyStatEntry[]>(campaign.dailyStats, []).filter((stat) =>
+      (!range.from || stat.date >= range.from) && (!range.to || stat.date <= range.to)
+    );
+    const spend = stats.reduce((sum, stat) => sum + stat.spend, 0);
+    const clicks = stats.reduce((sum, stat) => sum + stat.clicks, 0);
+    const impressions = stats.reduce((sum, stat) => sum + stat.impressions, 0);
+    const conversions = stats.reduce((sum, stat) => sum + stat.conversions, 0);
+    return { ...campaign, spend, clicks, impressions, conversions,
+      ctr: impressions > 0 ? clicks / impressions * 100 : 0,
+      cpc: clicks > 0 ? spend / clicks : 0, cpa: conversions > 0 ? spend / conversions : 0 };
+  });
+  const totalSpend = visibleCampaigns.reduce((s, c) => s + c.spend, 0);
+  const totalConversions = visibleCampaigns.reduce((s, c) => s + c.conversions, 0);
+  const totalClicks = visibleCampaigns.reduce((s, c) => s + c.clicks, 0);
+  const totalImpressions = visibleCampaigns.reduce((s, c) => s + c.impressions, 0);
   const activeCampaigns = campaigns.filter((c) => c.status === "ACTIVE").length;
   const totalClients = clients.length;
   const lowBudgetCampaigns = campaigns.filter((c) => {
@@ -71,7 +99,7 @@ async function getDashboardData() {
   // Sum of account prepaid balances fetched from Meta/Google APIs during sync
   const availableFunds = clients.reduce((sum, c) => sum + c.balance, 0);
 
-  const spendByPlatform = campaigns.reduce<Record<string, number>>((acc, c) => {
+  const spendByPlatform = visibleCampaigns.reduce<Record<string, number>>((acc, c) => {
     acc[c.platform] = (acc[c.platform] ?? 0) + c.spend;
     return acc;
   }, {});
@@ -79,7 +107,9 @@ async function getDashboardData() {
   // Merge daily stats for chart
   const chartDataMap = new Map<string, ChartDataPoint>();
   for (const campaign of campaigns) {
-    const stats = safeJsonParse<DailyStatEntry[]>(campaign.dailyStats, []);
+    const stats = safeJsonParse<DailyStatEntry[]>(campaign.dailyStats, []).filter((stat) =>
+      (!range.from || stat.date >= range.from) && (!range.to || stat.date <= range.to)
+    );
     for (const stat of stats) {
       const existing = chartDataMap.get(stat.date) ?? {
         date: stat.date, spend: 0, clicks: 0, impressions: 0, conversions: 0,
@@ -95,8 +125,11 @@ async function getDashboardData() {
   }
 
   const chartData = Array.from(chartDataMap.values())
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(-30);
+    .sort((a, b) => a.date.localeCompare(b.date));
+  const topCampaigns = visibleCampaigns
+    .filter((campaign) => campaign.status === "ACTIVE")
+    .sort((a, b) => b.spend - a.spend)
+    .slice(0, 8);
 
   return {
     stats: {
@@ -139,8 +172,16 @@ function QuickStat({
   );
 }
 
-export default async function DashboardPage() {
-  const { stats, spendByPlatform, clientBalances, recentAlerts, topCampaigns, chartData } = await getDashboardData();
+export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ range?: string; from?: string; to?: string }> }) {
+  const query = await searchParams;
+  const range = dashboardRange(query.range ?? "LAST_30", query.from, query.to);
+  const rangeLabel = query.range === "ALL" ? "All time" : query.range === "CUSTOM"
+    ? `${range.from ?? "Any date"} – ${range.to ?? "Today"}`
+    : query.range === "TODAY" ? "Today" : query.range === "YESTERDAY" ? "Yesterday"
+    : query.range === "LAST_7" ? "Last 7 days" : query.range === "THIS_WEEK" ? "This week"
+    : query.range === "THIS_MONTH" ? "This month" : query.range === "LAST_MONTH" ? "Last month"
+    : "Last 30 days";
+  const { stats, spendByPlatform, clientBalances, recentAlerts, topCampaigns, chartData } = await getDashboardData(range);
 
   return (
     <div className="flex flex-col">
@@ -151,6 +192,8 @@ export default async function DashboardPage() {
           title="Overview"
           description="Performance across all clients and ad platforms"
         />
+
+        <ClientDateFilter />
 
         {/* Budget warning banner — only when something needs action */}
         {stats.lowBudgetCampaigns > 0 && (
@@ -174,7 +217,7 @@ export default async function DashboardPage() {
           <StatsCard
             title="Total Spend"
             value={formatCurrency(stats.totalSpend, "INR", true)}
-            subtitle="Lifetime, all platforms"
+            subtitle={`${rangeLabel}, all platforms`}
             icon={IndianRupee}
           />
           <AvailableFundsCard fallback={stats.availableFunds} />
@@ -232,13 +275,13 @@ export default async function DashboardPage() {
             <SpendChart
               data={chartData}
               title="Spend & Conversions"
-              description="Daily totals for the last 30 days"
+              description={`Daily totals · ${rangeLabel}`}
             />
           </div>
           <PlatformPieChart
             data={spendByPlatform}
             title="Spend by Platform"
-            description="Share of total spend"
+            description={`Share of spend · ${rangeLabel}`}
           />
         </div>
 
@@ -248,7 +291,7 @@ export default async function DashboardPage() {
             <CampaignTable
               campaigns={topCampaigns}
               title="Top Active Campaigns"
-              description="Highest spend first"
+              description={`Highest spend · ${rangeLabel}`}
               compact
               viewAllHref="/campaigns"
             />

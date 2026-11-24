@@ -140,6 +140,7 @@ export type CampaignSortField =
 export interface LeadFilters {
   clientId?: string;
   source?: LeadSource;
+  crmStatus?: string;
   /** ISO timestamp — inclusive lower bound on createdAt */
   from?: string;
   /** ISO timestamp — inclusive upper bound on createdAt */

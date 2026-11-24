@@ -11,6 +11,7 @@ interface RecentAlertsProps {
   title?: string;
   description?: string;
   maxItems?: number;
+  compact?: boolean;
 }
 
 export const severityConfig = {
@@ -24,11 +25,12 @@ export function RecentAlerts({
   title = "Recent Alerts",
   description = "Unread alerts requiring attention",
   maxItems = 5,
+  compact = false,
 }: RecentAlertsProps) {
   const visibleAlerts = alerts.slice(0, maxItems);
 
   return (
-    <Card className="flex h-full flex-col">
+    <Card className={cn("flex flex-col", !compact && "h-full")}>
       <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
         <div className="space-y-1">
           <CardTitle>{title}</CardTitle>
@@ -41,7 +43,7 @@ export function RecentAlerts({
           View all <ArrowRight className="h-3.5 w-3.5" />
         </Link>
       </CardHeader>
-      <CardContent className="flex-1">
+      <CardContent className={cn(!compact && "flex-1")}>
         {visibleAlerts.length === 0 ? (
           <div className="flex h-full min-h-[200px] flex-col items-center justify-center rounded-lg border border-dashed text-center">
             <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10">

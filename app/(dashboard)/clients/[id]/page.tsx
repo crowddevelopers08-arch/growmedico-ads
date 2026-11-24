@@ -9,9 +9,10 @@ import { BudgetProgress } from "@/components/dashboard/BudgetProgress";
 import { RecentAlerts } from "@/components/dashboard/RecentAlerts";
 import { StatsCard } from "@/components/dashboard/StatsCard";
 import { LeadsView } from "@/components/leads/LeadsView";
+import { ClientDateFilter } from "@/components/clients/ClientDateFilter";
+import { TeleCrmStatusPanel } from "@/components/clients/TeleCrmStatusPanel";
 import { SyncButton } from "@/components/shared/SyncButton";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   Edit, IndianRupee, MousePointerClick,
   Target, Activity, Mail, Phone, Building2, CalendarDays, Wallet, CreditCard,
@@ -29,6 +30,7 @@ export const dynamic = "force-dynamic";
 
 interface Params {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ range?: string; from?: string; to?: string }>;
 }
 
 export async function generateMetadata({ params }: Params): Promise<Metadata> {
@@ -37,8 +39,44 @@ export async function generateMetadata({ params }: Params): Promise<Metadata> {
   return { title: client?.name ?? "Client" };
 }
 
-async function getClientData(id: string) {
-  const client = await prisma.client.findUnique({
+function resolveDateRange(range: string, from?: string, to?: string) {
+  const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Kolkata" });
+  const shift = (date: string, days: number) => {
+    const d = new Date(`${date}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0, 10);
+  };
+  switch (range) {
+    case "TODAY": return { from: today, to: today };
+    case "YESTERDAY": { const day = shift(today, -1); return { from: day, to: day }; }
+    case "LAST_7": return { from: shift(today, -6), to: today };
+    case "THIS_WEEK": {
+      const weekday = new Date(`${today}T00:00:00Z`).getUTCDay();
+      return { from: shift(today, -((weekday + 6) % 7)), to: today };
+    }
+    case "THIS_MONTH": return { from: `${today.slice(0, 7)}-01`, to: today };
+    case "LAST_MONTH": {
+      const first = `${today.slice(0, 7)}-01`;
+      const end = shift(first, -1);
+      return { from: `${end.slice(0, 7)}-01`, to: end };
+    }
+    case "CUSTOM": return { from: from || undefined, to: to || undefined };
+    case "ALL": return {};
+    default: return { from: shift(today, -29), to: today };
+  }
+}
+
+function istDateBoundary(date: string, end = false) {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, end ? 18 : -6, end ? 30 : 30));
+}
+
+async function getClientData(id: string, range: { from?: string; to?: string }) {
+  const leadDateFilter = {
+    ...(range.from && { gte: istDateBoundary(range.from) }),
+    ...(range.to && { lt: istDateBoundary(range.to, true) }),
+  };
+  const [client, leadStatuses] = await Promise.all([prisma.client.findUnique({
     where: { id },
     include: {
       campaigns: { orderBy: { spend: "desc" } },
@@ -49,7 +87,11 @@ async function getClientData(id: string) {
         take: 10,
       },
     },
-  });
+  }), prisma.lead.groupBy({
+    by: ["crmStatus"],
+    where: { clientId: id, crmStatus: { not: null }, ...(Object.keys(leadDateFilter).length ? { createdAt: leadDateFilter } : {}) },
+    _count: { _all: true },
+  })]);
 
   if (!client) return null;
 
@@ -58,11 +100,38 @@ async function getClientData(id: string) {
   const totalClicks = client.campaigns.reduce((s, c) => s + c.clicks, 0);
   const totalImpressions = client.campaigns.reduce((s, c) => s + c.impressions, 0);
   const activeCampaigns = client.campaigns.filter((c) => c.status === "ACTIVE").length;
+  const hasDateRange = Boolean(range.from || range.to);
+  const campaignStats = client.campaigns.map((campaign) => {
+    const stats = safeJsonParse<DailyStatEntry[]>(campaign.dailyStats, []).filter((stat) =>
+      (!range.from || stat.date >= range.from) && (!range.to || stat.date <= range.to)
+    );
+    if (!hasDateRange) return campaign;
+    const spend = stats.reduce((sum, stat) => sum + stat.spend, 0);
+    const clicks = stats.reduce((sum, stat) => sum + stat.clicks, 0);
+    const impressions = stats.reduce((sum, stat) => sum + stat.impressions, 0);
+    const conversions = stats.reduce((sum, stat) => sum + stat.conversions, 0);
+    return { ...campaign, spend, clicks, impressions, conversions,
+      ctr: impressions > 0 ? clicks / impressions * 100 : 0,
+      cpc: clicks > 0 ? spend / clicks : 0, cpa: conversions > 0 ? spend / conversions : 0 };
+  });
+  const displayedCampaigns = hasDateRange
+    ? campaignStats.sort((a, b) => b.spend - a.spend)
+    : client.campaigns;
+  const displayedSpend = hasDateRange ? campaignStats.reduce((sum, campaign) => sum + campaign.spend, 0) : totalSpend;
+  const displayedConversions = hasDateRange ? campaignStats.reduce((sum, campaign) => sum + campaign.conversions, 0) : totalConversions;
+  const displayedClicks = hasDateRange ? campaignStats.reduce((sum, campaign) => sum + campaign.clicks, 0) : totalClicks;
+  const displayedImpressions = hasDateRange ? campaignStats.reduce((sum, campaign) => sum + campaign.impressions, 0) : totalImpressions;
+  const crmStatusCounts = leadStatuses
+    .map(({ crmStatus, _count }) => ({ status: crmStatus!, count: _count._all }))
+    .sort((a, b) => b.count - a.count);
+  const totalCrmLeads = crmStatusCounts.reduce((sum, item) => sum + item.count, 0);
 
   // Merge daily stats for chart
   const chartDataMap = new Map<string, ChartDataPoint>();
   for (const campaign of client.campaigns) {
-    const stats = safeJsonParse<DailyStatEntry[]>(campaign.dailyStats, []);
+    const stats = safeJsonParse<DailyStatEntry[]>(campaign.dailyStats, []).filter((stat) =>
+      (!range.from || stat.date >= range.from) && (!range.to || stat.date <= range.to)
+    );
     for (const stat of stats) {
       const existing = chartDataMap.get(stat.date) ?? {
         date: stat.date, spend: 0, clicks: 0, impressions: 0, conversions: 0,
@@ -78,15 +147,17 @@ async function getClientData(id: string) {
   }
 
   const chartData = Array.from(chartDataMap.values())
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(-30);
+    .sort((a, b) => a.date.localeCompare(b.date));
 
   return {
     client,
+    campaignStats: displayedCampaigns,
+    crmStatusCounts,
+    totalCrmLeads,
     stats: {
-      totalSpend, totalConversions, totalClicks, activeCampaigns,
-      costPerConversion: totalConversions > 0 ? totalSpend / totalConversions : 0,
-      ctr: totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0,
+      totalSpend: displayedSpend, totalConversions: displayedConversions, totalClicks: displayedClicks, activeCampaigns,
+      costPerConversion: displayedConversions > 0 ? displayedSpend / displayedConversions : 0,
+      ctr: displayedImpressions > 0 ? (displayedClicks / displayedImpressions) * 100 : 0,
     },
     chartData,
   };
@@ -101,13 +172,20 @@ function SectionHeading({ title, description }: { title: string; description: st
   );
 }
 
-export default async function ClientDetailPage({ params }: Params) {
-  const { id } = await params;
-  const data = await getClientData(id);
+export default async function ClientDetailPage({ params, searchParams }: Params) {
+  const [{ id }, query] = await Promise.all([params, searchParams]);
+  const range = resolveDateRange(query.range ?? "LAST_30", query.from, query.to);
+  const data = await getClientData(id, range);
 
   if (!data) notFound();
 
-  const { client, stats, chartData } = data;
+  const { client, stats, chartData, crmStatusCounts, totalCrmLeads, campaignStats } = data;
+  const rangeLabel = query.range === "ALL" ? "All time" : query.range === "CUSTOM"
+    ? `${range.from ?? "Any date"} – ${range.to ?? "Today"}`
+    : query.range === "TODAY" ? "Today" : query.range === "YESTERDAY" ? "Yesterday"
+    : query.range === "LAST_7" ? "Last 7 days" : query.range === "THIS_WEEK" ? "This week"
+    : query.range === "THIS_MONTH" ? "This month" : query.range === "LAST_MONTH" ? "Last month"
+    : "Last 30 days";
   const platformColor = getPlatformColor(client.platform);
   const balanceTone = getBalanceTone(client);
   const initials = client.name.split(/\s+/).map((w) => w[0]).join("").toUpperCase().slice(0, 2);
@@ -184,6 +262,8 @@ export default async function ClientDetailPage({ params }: Params) {
           </div>
         </div>
 
+        <ClientDateFilter />
+
         {/* KPIs */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-5">
           <StatsCard
@@ -201,7 +281,7 @@ export default async function ClientDetailPage({ params }: Params) {
           <StatsCard
             title="Total Spend"
             value={formatCurrency(stats.totalSpend, "INR", true)}
-            subtitle="Lifetime"
+            subtitle={rangeLabel}
             icon={IndianRupee}
           />
           <StatsCard
@@ -227,12 +307,15 @@ export default async function ClientDetailPage({ params }: Params) {
           />
         </div>
 
+        <TeleCrmStatusPanel statuses={crmStatusCounts} total={totalCrmLeads} />
+
         {/* Unread alerts first — they're the most actionable thing on the page */}
         {client.alerts.length > 0 && (
           <RecentAlerts
             alerts={client.alerts as AlertWithClient[]}
             title="Unread Alerts"
             description={`${client.alerts.length} alert${client.alerts.length !== 1 ? "s" : ""} for this client`}
+            compact
           />
         )}
 
@@ -242,7 +325,7 @@ export default async function ClientDetailPage({ params }: Params) {
             <SpendChart
               data={chartData}
               title="Spend & Conversions"
-              description="Daily totals for the last 30 days"
+              description={`Daily totals · ${rangeLabel}`}
             />
           </div>
           <BudgetProgress campaigns={client.campaigns} />
@@ -250,7 +333,7 @@ export default async function ClientDetailPage({ params }: Params) {
 
         {/* Campaign table */}
         <CampaignTable
-          campaigns={client.campaigns.map((c) => ({
+          campaigns={campaignStats.map((c) => ({
             ...c,
             client: { id: client.id, name: client.name, platform: client.platform },
           })) as CampaignWithClient[]}
@@ -260,12 +343,19 @@ export default async function ClientDetailPage({ params }: Params) {
         />
 
         {/* Leads */}
-        <section className="space-y-4">
+        <section id="client-leads" className="scroll-mt-20 space-y-4">
           <SectionHeading
             title="Leads"
             description={`WhatsApp, Meta Lead Form, website and call enquiries for ${client.name}`}
           />
-          <LeadsView clientId={client.id} />
+          <LeadsView
+            key={`${query.range ?? "LAST_30"}-${query.from ?? ""}-${query.to ?? ""}-${query.crmStatus ?? ""}`}
+            clientId={client.id}
+            initialCrmStatus={query.crmStatus}
+            initialDatePreset={(query.range ?? "LAST_30") as "ALL" | "TODAY" | "YESTERDAY" | "LAST_7" | "THIS_WEEK" | "LAST_30" | "THIS_MONTH" | "LAST_MONTH" | "CUSTOM"}
+            initialFrom={query.from}
+            initialTo={query.to}
+          />
         </section>
       </div>
     </div>

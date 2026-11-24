@@ -76,6 +76,7 @@ export function CampaignTable({
                     <th className="th text-right">Clicks</th>
                     <th className="th text-right">CTR</th>
                     <th className="th text-right">Conv.</th>
+                    <th className="th text-right">CPL</th>
                     <th className="th text-right">CPC</th>
                   </>
                 )}
@@ -141,6 +142,14 @@ export function CampaignTable({
                         </td>
                         <td className="px-4 py-3 text-right font-medium tabular-nums">
                           {formatNumber(campaign.conversions)}
+                        </td>
+                        <td
+                          className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-muted-foreground"
+                          title="Cost per lead (spend divided by conversions)"
+                        >
+                          {campaign.conversions > 0
+                            ? formatCurrency(campaign.spend / campaign.conversions)
+                            : "—"}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-muted-foreground">
                           {formatCurrency(campaign.cpc)}

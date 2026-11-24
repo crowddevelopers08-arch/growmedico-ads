@@ -21,7 +21,7 @@ interface UseLeadsReturn {
 const EMPTY_COUNTS: Record<LeadSource, number> = { WHATSAPP: 0, META_FORM: 0, WEBSITE: 0, MANUAL: 0 };
 
 export function useLeads(options: UseLeadsOptions = {}): UseLeadsReturn {
-  const { clientId, source, from, to, search, page = 1, pageSize = 25 } = options;
+  const { clientId, source, crmStatus, from, to, search, page = 1, pageSize = 25 } = options;
 
   const [leads, setLeads] = useState<LeadWithClient[]>([]);
   const [total, setTotal] = useState(0);
@@ -38,6 +38,7 @@ export function useLeads(options: UseLeadsOptions = {}): UseLeadsReturn {
       const params = new URLSearchParams();
       if (clientId) params.set("clientId", clientId);
       if (source) params.set("source", source);
+      if (crmStatus) params.set("crmStatus", crmStatus);
       if (from) params.set("from", from);
       if (to) params.set("to", to);
       if (search) params.set("search", search);
@@ -57,7 +58,7 @@ export function useLeads(options: UseLeadsOptions = {}): UseLeadsReturn {
     } finally {
       setIsLoading(false);
     }
-  }, [clientId, source, from, to, search, page, pageSize]);
+  }, [clientId, source, crmStatus, from, to, search, page, pageSize]);
 
   useEffect(() => {
     fetchLeads();

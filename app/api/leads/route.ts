@@ -24,6 +24,7 @@ export async function GET(request: Request) {
     const filters: LeadFilters = {
       clientId: searchParams.get("clientId") ?? undefined,
       source: sourceParam && LEAD_SOURCES.includes(sourceParam) ? sourceParam : undefined,
+      crmStatus: searchParams.get("crmStatus") ?? undefined,
       from: searchParams.get("from") ?? undefined,
       to: searchParams.get("to") ?? undefined,
       search: searchParams.get("search") ?? undefined,
@@ -39,6 +40,7 @@ export async function GET(request: Request) {
     // Everything except source — reused for the per-source counts
     const baseWhere: Prisma.LeadWhereInput = {
       ...(filters.clientId && { clientId: filters.clientId }),
+      ...(filters.crmStatus && { crmStatus: filters.crmStatus }),
       ...((from || to) && {
         createdAt: { ...(from && { gte: from }), ...(to && { lte: to }) },
       }),
