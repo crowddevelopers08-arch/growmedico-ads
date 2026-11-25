@@ -33,7 +33,13 @@ export async function GET(request: Request) {
         take: pageSize,
       }),
       prisma.alert.count({ where }),
-      prisma.alert.count({ where: { isRead: false } }),
+      prisma.alert.count({
+        where: {
+          isRead: false,
+          ...(clientId && { clientId }),
+          ...(severity && { severity }),
+        },
+      }),
     ]);
 
     return NextResponse.json({

@@ -12,8 +12,10 @@ import { ErrorMessage } from "@/components/shared/ErrorMessage";
 import { PageHeader } from "@/components/shared/PageHeader";
 import { Pagination } from "@/components/shared/Pagination";
 import { SegmentedControl } from "@/components/shared/SegmentedControl";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { severityConfig } from "@/components/dashboard/RecentAlerts";
 import { useAlerts } from "@/hooks/useAlerts";
+import { useClients } from "@/hooks/useClients";
 import { formatRelativeTime, cn } from "@/lib/utils";
 
 const PAGE_SIZE = 20;
@@ -21,13 +23,17 @@ const PAGE_SIZE = 20;
 type SeverityFilter = "ALL" | "CRITICAL" | "WARNING" | "INFO";
 
 export default function AlertsPage() {
+  const [clientId, setClientId] = useState("");
   const [severity, setSeverity] = useState<SeverityFilter>("ALL");
   const [readFilter, setReadFilter] = useState<"ALL" | "UNREAD">("ALL");
   const [page, setPage] = useState(1);
   const unreadOnly = readFilter === "UNREAD";
+  const { clients, isLoading: clientsLoading } = useClients();
+  const selectedClient = clients.find((client) => client.id === clientId);
 
   const { alerts, total, totalPages, unreadCount, isLoading, error, markAsRead, markAllAsRead } =
     useAlerts({
+      clientId: clientId || undefined,
       severity: severity !== "ALL" ? severity : undefined,
       unreadOnly,
       page,
@@ -43,14 +49,16 @@ export default function AlertsPage() {
           title="Alerts"
           description={
             unreadCount > 0
-              ? `${unreadCount} unread · budget, spend and account issues across clients`
-              : "Budget, spend and account issues across clients"
+              ? `${unreadCount} unread · budget, spend and account issues ${selectedClient ? `for ${selectedClient.name}` : "across clients"}`
+              : selectedClient
+                ? `Budget, spend and account issues for ${selectedClient.name}`
+                : "Budget, spend and account issues across clients"
           }
           actions={
             unreadCount > 0 && (
-              <Button variant="outline" onClick={() => markAllAsRead()}>
+              <Button variant="outline" onClick={() => markAllAsRead(clientId || undefined)}>
                 <CheckCheck />
-                Mark all as read
+                {clientId ? "Mark client alerts as read" : "Mark all as read"}
               </Button>
             )
           }
@@ -58,6 +66,20 @@ export default function AlertsPage() {
 
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-2">
+          <Select
+            value={clientId || "ALL"}
+            onValueChange={(value) => { setClientId(value === "ALL" ? "" : value); setPage(1); }}
+          >
+            <SelectTrigger className="w-[220px] bg-card" aria-label="Filter alerts by client" disabled={clientsLoading}>
+              <SelectValue placeholder="All clients" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All clients</SelectItem>
+              {clients.map((client) => (
+                <SelectItem key={client.id} value={client.id}>{client.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <SegmentedControl
             ariaLabel="Read status"
             value={readFilter}
